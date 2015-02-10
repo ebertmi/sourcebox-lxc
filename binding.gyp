@@ -1,7 +1,14 @@
 {
   "targets": [{
     "target_name": "lxc",
-    "sources": [ "src/lxc.cc" ],
-    "libraries": [ "-llxc" ]
+    "sources": [
+      "src/lxc.cc"
+    ],
+    "libraries": [
+      "-llxc"
+    ],
+    "include_dirs": [
+      "<!(node -e \"require('nan')\")"
+    ]
   }]
 }

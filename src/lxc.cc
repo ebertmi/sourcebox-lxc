@@ -1,14 +1,24 @@
 #include <lxc/lxccontainer.h>
-#include <node.h>
 #include <string>
+
+#include <node.h>
+#include <nan.h>
 
 using namespace v8;
 
 struct Baton {
-    virtual ~Baton() {}
+    Baton() {
+        req.data = this;
+    }
+
+    virtual ~Baton() {
+        delete callback;
+    }
 
     uv_work_t req;
-    Persistent<Function> callback;
+
+    // TODO decide between NanCallback and Persistent
+    NanCallback *callback;
 
     bool error;
     std::string error_msg;
@@ -23,15 +33,15 @@ struct NewBaton : Baton {
 
 // Helper, Cleanup etc.
 
-void weakCallback(Persistent<Value> persistent, void *parameter) {
-    lxc_container *c = static_cast<lxc_container*>(parameter);
-    lxc_container_put(c);
+NAN_WEAK_CALLBACK(weakCallback) {
+    lxc_container_put(data.GetParameter());
 
-    persistent.Dispose();
+    // FIXME is this required when the handle is weak?
+    //NanDisposePersistent(data.GetValue());
 }
 
-lxc_container *unwrap(const Arguments& args) {
-    void *ptr = args.Holder()->GetPointerFromInternalField(0);
+NAN_INLINE lxc_container *unwrap(_NAN_METHOD_ARGS) {
+    void *ptr = NanGetInternalFieldPointer(args.Holder(), 0);
     return static_cast<lxc_container*>(ptr);
 }
 
@@ -39,12 +49,14 @@ lxc_container *unwrap(const Arguments& args) {
 
 Persistent<Function> constructor;
 
-Handle<Value> LXCContainer(const Arguments& args) {
+NAN_METHOD(LXCContainer) {
+    NanScope();
+
     if (args.IsConstructCall()) {
-        return args.This();
+        NanReturnValue(args.This());
     }
 
-    return constructor->NewInstance();
+    NanReturnValue(NanNew(constructor)->NewInstance());
 }
 
 // New container
@@ -57,12 +69,12 @@ void newContainerAsync(uv_work_t *req) {
     baton->error = !baton->container;
 
     if (baton->error) {
-        baton->error_msg = std::string("Failed to create container");
+        baton->error_msg = "Failed to create container";
     }
 }
 
 void newContainerAfter(uv_work_t *req, int status) {
-    HandleScope scope;
+    NanScope();
 
     Baton *baton = static_cast<Baton*>(req->data);
 
@@ -70,79 +82,75 @@ void newContainerAfter(uv_work_t *req, int status) {
         unsigned int argc = 1;
 
         Local<Value> argv[argc] = {
-            Exception::Error(String::New(baton->error_msg.c_str()))
+            Exception::Error(NanNew(baton->error_msg))
         };
 
-        baton->callback->Call(Context::GetCurrent()->Global(), argc, argv);
+        baton->callback->Call(argc, argv);
     } else {
         unsigned int argc = 2;
 
-        Local<Object> container = constructor->NewInstance();
-        container->SetPointerInInternalField(0, baton->container);
+        Local<Object> container = NanNew(constructor)->NewInstance();
+        NanSetInternalFieldPointer(container, 0, baton->container);
 
-        Persistent<Object> persistent = Persistent<Object>::New(container);
-        persistent.MakeWeak(baton->container, &weakCallback);
+        NanMakeWeakPersistent(container, baton->container, &weakCallback);
 
         Local<Value> argv[argc] = {
-            Local<Value>::New(Null()),
+            NanNull(),
             container
         };
 
-        baton->callback->Call(Context::GetCurrent()->Global(), argc, argv);
+        baton->callback->Call(argc, argv);
     }
 
-    baton->callback.Dispose();
     delete baton;
 }
 
-Handle<Value> newContainer(const Arguments& args) {
-    HandleScope scope;
+
+NAN_METHOD(newContainer) {
+    NanScope();
 
     NewBaton *baton = new NewBaton;
-    baton->req.data = baton;
 
     baton->name = std::string(*String::Utf8Value(args[0]));
     baton->configpath = std::string(*String::Utf8Value(args[1]));
 
-    Local<Function> callback = Local<Function>::Cast(args[2]);
-    baton->callback = Persistent<Function>::New(callback);
+    baton->callback = new NanCallback(args[2].As<Function>());
 
     uv_queue_work(uv_default_loop(), &baton->req,
             newContainerAsync, newContainerAfter);
 
-    return scope.Close(Undefined());
+    NanReturnUndefined();
 }
 
 // Methods
 
 // this is just a test, should probably be asynchronous
-Handle<Value> state(const Arguments& args) {
-    HandleScope scope;
+NAN_METHOD(state) {
+    NanScope();
 
     lxc_container *c = unwrap(args);
-    Local<String> state = String::New(c->state(c));
+    Local<String> state = NanNew<String>(c->state(c));
 
-    return scope.Close(state);
+    NanReturnValue(state);
 }
 
-void init(Handle<Object> exports, Handle<Object> module) {
-    HandleScope scope;
+// Initialization
 
-    Local<FunctionTemplate>constructorTemplate = FunctionTemplate::New(LXCContainer);
-    constructorTemplate->SetClassName(String::NewSymbol("LXCContainer"));
+void init(Handle<Object> exports, Handle<Object> module) {
+    NanScope();
+
+    Local<FunctionTemplate>constructorTemplate = NanNew<FunctionTemplate>(LXCContainer);
+
+    constructorTemplate->SetClassName(NanNew("LXCContainer"));
     constructorTemplate->InstanceTemplate()->SetInternalFieldCount(1);
 
     // Methods
-    Local<ObjectTemplate> prototype = constructorTemplate->PrototypeTemplate();
+    NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "state", state);
 
-    prototype->Set(String::NewSymbol("state"),
-            FunctionTemplate::New(state)->GetFunction());
-
-    constructor = Persistent<Function>::New(constructorTemplate->GetFunction());
+    NanAssignPersistent(constructor, constructorTemplate->GetFunction());
 
     // Exports
-    module->Set(String::NewSymbol("exports"),
-            FunctionTemplate::New(newContainer)->GetFunction());
+    module->Set(NanNew("exports"), NanNew<FunctionTemplate>(newContainer)->GetFunction());
 }
 
 NODE_MODULE(lxc, init);
