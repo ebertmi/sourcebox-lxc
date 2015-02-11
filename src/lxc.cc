@@ -6,6 +6,8 @@
 
 using namespace v8;
 
+// Baton structs to be passed to the async functions
+
 struct Baton {
     Baton() {
         req.data = this;
@@ -20,7 +22,7 @@ struct Baton {
     // TODO decide between NanCallback and Persistent
     NanCallback *callback;
 
-    bool error;
+    bool error = false;
     std::string error_msg;
 
     lxc_container *container;
@@ -35,9 +37,16 @@ struct NewBaton : Baton {
 
 NAN_WEAK_CALLBACK(weakCallback) {
     lxc_container_put(data.GetParameter());
+}
 
-    // FIXME is this required when the handle is weak?
-    //NanDisposePersistent(data.GetValue());
+NAN_INLINE void makeErrorCallback(Baton *baton) {
+    unsigned int argc = 1;
+
+    Local<Value> argv[argc] = {
+        NanError(baton->error_msg.c_str())
+    };
+
+    baton->callback->Call(argc, argv);
 }
 
 NAN_INLINE lxc_container *unwrap(_NAN_METHOD_ARGS) {
@@ -64,12 +73,19 @@ NAN_METHOD(LXCContainer) {
 void newContainerAsync(uv_work_t *req) {
     NewBaton *baton = static_cast<NewBaton*>(req->data);
 
-    baton->container = lxc_container_new(baton->name.c_str(),
+    lxc_container *container = lxc_container_new(baton->name.c_str(),
             baton->configpath.c_str());
-    baton->error = !baton->container;
 
-    if (baton->error) {
+    if (!container) {
         baton->error_msg = "Failed to create container";
+        baton->error = true;
+    } else if (!container->is_defined(container)) {
+        std::cout << container->error_string << std::endl;
+        baton->error_msg = "Container not found";
+        baton->error = true;
+        lxc_container_put(container);
+    } else {
+        baton->container = container;
     }
 }
 
@@ -79,13 +95,7 @@ void newContainerAfter(uv_work_t *req, int status) {
     Baton *baton = static_cast<Baton*>(req->data);
 
     if (baton->error) {
-        unsigned int argc = 1;
-
-        Local<Value> argv[argc] = {
-            Exception::Error(NanNew(baton->error_msg))
-        };
-
-        baton->callback->Call(argc, argv);
+        makeErrorCallback(baton);
     } else {
         unsigned int argc = 2;
 
@@ -129,7 +139,7 @@ NAN_METHOD(state) {
     NanScope();
 
     lxc_container *c = unwrap(args);
-    Local<String> state = NanNew<String>(c->state(c));
+    Local<String> state = NanNew(c->state(c));
 
     NanReturnValue(state);
 }
