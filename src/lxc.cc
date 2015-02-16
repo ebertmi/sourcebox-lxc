@@ -19,7 +19,6 @@ struct Baton {
 
     uv_work_t req;
 
-    // TODO decide between NanCallback and Persistent
     NanCallback *callback;
 
     bool error = false;
@@ -39,7 +38,7 @@ NAN_WEAK_CALLBACK(weakCallback) {
     lxc_container_put(data.GetParameter());
 }
 
-NAN_INLINE void makeErrorCallback(Baton *baton) {
+NAN_INLINE void makeErrorCallback(const Baton *baton) {
     unsigned int argc = 1;
 
     Local<Value> argv[argc] = {
@@ -62,7 +61,7 @@ NAN_METHOD(LXCContainer) {
     NanScope();
 
     if (args.IsConstructCall()) {
-        NanReturnValue(args.This());
+        NanReturnThis();
     }
 
     NanReturnValue(NanNew(constructor)->NewInstance());
@@ -80,7 +79,6 @@ void newContainerAsync(uv_work_t *req) {
         baton->error_msg = "Failed to create container";
         baton->error = true;
     } else if (!container->is_defined(container)) {
-        std::cout << container->error_string << std::endl;
         baton->error_msg = "Container not found";
         baton->error = true;
         lxc_container_put(container);
@@ -115,7 +113,6 @@ void newContainerAfter(uv_work_t *req, int status) {
     delete baton;
 }
 
-
 NAN_METHOD(newContainer) {
     NanScope();
 
@@ -133,6 +130,37 @@ NAN_METHOD(newContainer) {
 }
 
 // Methods
+
+NAN_METHOD(start) {
+    NanScope();
+    // TODO async is probably required, even when container is daemonized
+    // but for testing this will suffice
+
+    lxc_container *container = unwrap(args);
+
+    Local<Array> arguments = args[0].As<Array>();
+    int length = arguments->Length();
+
+    char **array = new char*[length + 1];
+
+    for (int i = 0; i < length; i++) {
+        String::Utf8Value utf8string(arguments->Get(i));
+        array[i] = new char[utf8string.length() + 1];
+        std::strcpy(array[i], *utf8string);
+    }
+
+    array[length] = NULL;
+
+    bool ret = container->start(container, false, array);
+
+    for (int i = 0; i < length; i++) {
+        delete[] array[i];
+    }
+
+    delete[] array;
+
+    NanReturnValue(NanNew(ret));
+}
 
 // this is just a test, should probably be asynchronous
 NAN_METHOD(state) {
@@ -156,6 +184,7 @@ void init(Handle<Object> exports, Handle<Object> module) {
 
     // Methods
     NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "state", state);
+    NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "start", start);
 
     NanAssignPersistent(constructor, constructorTemplate->GetFunction());
 
