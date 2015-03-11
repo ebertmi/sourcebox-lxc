@@ -5,6 +5,7 @@
       "src/lxc.cc"
     ],
     "libraries": [
+      "-lutil",
       "-llxc"
     ],
     "include_dirs": [

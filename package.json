@@ -1,0 +1,17 @@
+{
+  "name": "sourcebox",
+  "description": "LXC-based sandbox",
+  "version": "0.0.1",
+  "author": "Johannes Henninger <johannes@henninger.io>",
+  "license": "GPL-3.0+",
+  "private": true,
+  "os": ["linux"],
+  "main": "lib/lxc.js",
+  "engines": {
+    "node": ">=0.11.14"
+  },
+  "dependencies": {
+    "bindings": "^1.2.1",
+    "nan": "^1.7.0"
+  }
+}

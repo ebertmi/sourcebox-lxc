@@ -1,4 +1,8 @@
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
 #include <lxc/lxccontainer.h>
+
 #include <string>
 
 #include <node.h>
@@ -34,6 +38,23 @@ struct NewBaton : Baton {
 
 // Helper, Cleanup etc.
 
+bool inAttachedProcess = false;
+
+static void exitNow(int status, void *) {
+    if (inAttachedProcess) {
+        _exit(status);
+    }
+}
+
+inline int attachWrap(lxc_container *container, lxc_attach_exec_t execFunction,
+        void *execPayload, lxc_attach_options_t *options, pid_t *attachedProcess) {
+    inAttachedProcess = true;
+    int ret = container->attach(container, execFunction, execPayload,
+            options, attachedProcess);
+    inAttachedProcess = false;
+    return ret;
+}
+
 NAN_WEAK_CALLBACK(weakCallback) {
     lxc_container_put(data.GetParameter());
 }
@@ -51,6 +72,40 @@ NAN_INLINE void makeErrorCallback(const Baton *baton) {
 NAN_INLINE lxc_container *unwrap(_NAN_METHOD_ARGS) {
     void *ptr = NanGetInternalFieldPointer(args.Holder(), 0);
     return static_cast<lxc_container*>(ptr);
+}
+
+NAN_METHOD(waitPids) {
+    NanScope();
+
+    Local<Array> pids = args[0].As<Array>();
+    int length = pids->Length();
+
+    for (int i = 0; i < length; i++) {
+
+        int pid = pids->Get(i)->NumberValue();
+        int status;
+
+        if (waitpid(pid, &status, WNOHANG) > 0) {
+            Local<Object> result = NanNew<Object>();
+            result->Set(NanNew("pid"), NanNew(pid));
+
+            if (WIFEXITED(status)) {
+                int code = WEXITSTATUS(status);
+                result->Set(NanNew("code"), NanNew(code));
+            } else if (WIFSIGNALED(status)) {
+                const char *signal = node::signo_string(WTERMSIG(status));
+                result->Set(NanNew("signal"), NanNew(signal));
+            } else {
+                // child process got stopped or continued
+                // FIXME trace?
+                NanReturnNull();
+            }
+
+            NanReturnValue(result);
+        }
+    }
+
+    NanReturnNull();
 }
 
 // Constructor
@@ -162,6 +217,48 @@ NAN_METHOD(start) {
     NanReturnValue(NanNew(ret));
 }
 
+NAN_METHOD(attach) {
+    NanScope();
+
+    lxc_container *c = unwrap(args);
+
+    lxc_attach_options_t options = LXC_ATTACH_OPTIONS_DEFAULT;
+    lxc_attach_command_t command;
+
+    Local<Array> arguments = args[1].As<Array>();
+    int length = arguments->Length();
+
+    command.program = strdup(*String::Utf8Value(args[0]));
+    command.argv = new char*[length + 2];
+
+    command.argv[0] = command.program;
+    command.argv[length + 1] = NULL;
+
+    for (int i = 0; i < length; i++) {
+        command.argv[i + 1] = strdup(*String::Utf8Value(arguments->Get(i)));
+    }
+
+    int pid;
+
+    int ret = attachWrap(c, lxc_attach_run_command, &command, &options, &pid);
+
+    for (int i = 0; i < length + 1; i++) {
+        free(command.argv[i]);
+    }
+
+    delete[] command.argv;
+
+    Local<Object> result = NanNew<Object>();
+
+    if (ret == 0) {
+        result->Set(NanNew("pid"), NanNew(pid));
+    } else {
+        result->Set(NanNew("error"), NanError(c->error_string));
+    }
+
+    NanReturnValue(result);
+}
+
 // this is just a test, should probably be asynchronous
 NAN_METHOD(state) {
     NanScope();
@@ -174,8 +271,10 @@ NAN_METHOD(state) {
 
 // Initialization
 
-void init(Handle<Object> exports, Handle<Object> module) {
+void init(Handle<Object> exports) {
     NanScope();
+
+    on_exit(exitNow, NULL);
 
     Local<FunctionTemplate>constructorTemplate = NanNew<FunctionTemplate>(LXCContainer);
 
@@ -183,13 +282,16 @@ void init(Handle<Object> exports, Handle<Object> module) {
     constructorTemplate->InstanceTemplate()->SetInternalFieldCount(1);
 
     // Methods
-    NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "state", state);
     NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "start", start);
+    NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "state", state);
+    NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "attach", attach);
 
     NanAssignPersistent(constructor, constructorTemplate->GetFunction());
 
     // Exports
-    module->Set(NanNew("exports"), NanNew<FunctionTemplate>(newContainer)->GetFunction());
+    exports->Set(NanNew("getContainer"), NanNew<FunctionTemplate>(newContainer)->GetFunction());
+    exports->Set(NanNew("waitPids"), NanNew<FunctionTemplate>(waitPids)->GetFunction());
+
 }
 
 NODE_MODULE(lxc, init);
