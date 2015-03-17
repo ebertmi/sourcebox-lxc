@@ -55,6 +55,15 @@ inline int attachWrap(lxc_container *container, lxc_attach_exec_t execFunction,
     return ret;
 }
 
+static int attachFunc(void *payload) {
+    lxc_attach_command_t *command = static_cast<lxc_attach_command_t*>(payload);
+
+    execvp(command->program, command->argv);
+
+    // if exec fails, exit with code 128 (see GNU conventions)
+    return 128;
+}
+
 NAN_WEAK_CALLBACK(weakCallback) {
     lxc_container_put(data.GetParameter());
 }
@@ -81,20 +90,20 @@ NAN_METHOD(waitPids) {
     int length = pids->Length();
 
     for (int i = 0; i < length; i++) {
-
         int pid = pids->Get(i)->NumberValue();
         int status;
 
+        // FIXME handle waitpid errors
         if (waitpid(pid, &status, WNOHANG) > 0) {
             Local<Object> result = NanNew<Object>();
             result->Set(NanNew("pid"), NanNew(pid));
 
             if (WIFEXITED(status)) {
-                int code = WEXITSTATUS(status);
-                result->Set(NanNew("code"), NanNew(code));
+                int exitCode = WEXITSTATUS(status);
+                result->Set(NanNew("exitCode"), NanNew(exitCode));
             } else if (WIFSIGNALED(status)) {
-                const char *signal = node::signo_string(WTERMSIG(status));
-                result->Set(NanNew("signal"), NanNew(signal));
+                const char *signalCode = node::signo_string(WTERMSIG(status));
+                result->Set(NanNew("signalCode"), NanNew(signalCode));
             } else {
                 // child process got stopped or continued
                 // FIXME trace?
@@ -217,6 +226,7 @@ NAN_METHOD(start) {
     NanReturnValue(NanNew(ret));
 }
 
+
 NAN_METHOD(attach) {
     NanScope();
 
@@ -240,7 +250,7 @@ NAN_METHOD(attach) {
 
     int pid;
 
-    int ret = attachWrap(c, lxc_attach_run_command, &command, &options, &pid);
+    int ret = attachWrap(c, attachFunc, &command, &options, &pid);
 
     for (int i = 0; i < length + 1; i++) {
         free(command.argv[i]);
