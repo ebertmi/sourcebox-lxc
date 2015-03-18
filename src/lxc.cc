@@ -6,6 +6,7 @@
 #include <lxc/lxccontainer.h>
 
 #include <string>
+#include <iostream>
 
 #include <nan.h>
 
@@ -123,13 +124,13 @@ NAN_METHOD(start) {
 
     delete[] array;
 
-    NanReturnValue(NanNew(ret));
+    NanReturnValue(NanNew<Boolean>(ret));
 }
 
 NAN_METHOD(attach) {
     NanScope();
 
-    lxc_container *c = unwrap(args);
+    lxc_container *container = unwrap(args);
 
     lxc_attach_options_t options = LXC_ATTACH_OPTIONS_DEFAULT;
     lxc_attach_command_t command;
@@ -149,7 +150,7 @@ NAN_METHOD(attach) {
 
     int pid;
 
-    int ret = attachWrap(c, attachFunc, &command, &options, &pid);
+    int ret = attachWrap(container, attachFunc, &command, &options, &pid);
 
     for (int i = 0; i < length + 1; i++) {
         free(command.argv[i]);
@@ -162,7 +163,7 @@ NAN_METHOD(attach) {
     if (ret == 0) {
         result->Set(NanNew("pid"), NanNew(pid));
     } else {
-        result->Set(NanNew("error"), NanError(c->error_string));
+        result->Set(NanNew("error"), NanError("Could not attach to container"));
     }
 
     NanReturnValue(result);
