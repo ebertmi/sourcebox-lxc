@@ -1,3 +1,5 @@
+#include "lxc.h"
+
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -5,55 +7,14 @@
 
 #include <string>
 
-#include <node.h>
 #include <nan.h>
+
+#include "async.h"
+#include "util.h"
 
 using namespace v8;
 
-// Baton structs to be passed to the async functions
-
-struct Baton {
-    Baton() {
-        req.data = this;
-    }
-
-    virtual ~Baton() {
-        delete callback;
-    }
-
-    uv_work_t req;
-
-    NanCallback *callback;
-
-    bool error = false;
-    std::string error_msg;
-
-    lxc_container *container;
-};
-
-struct NewBaton : Baton {
-    std::string name;
-    std::string configpath;
-};
-
 // Helper, Cleanup etc.
-
-bool inAttachedProcess = false;
-
-static void exitNow(int status, void *) {
-    if (inAttachedProcess) {
-        _exit(status);
-    }
-}
-
-inline int attachWrap(lxc_container *container, lxc_attach_exec_t execFunction,
-        void *execPayload, lxc_attach_options_t *options, pid_t *attachedProcess) {
-    inAttachedProcess = true;
-    int ret = container->attach(container, execFunction, execPayload,
-            options, attachedProcess);
-    inAttachedProcess = false;
-    return ret;
-}
 
 static int attachFunc(void *payload) {
     lxc_attach_command_t *command = static_cast<lxc_attach_command_t*>(payload);
@@ -62,20 +23,6 @@ static int attachFunc(void *payload) {
 
     // if exec fails, exit with code 128 (see GNU conventions)
     return 128;
-}
-
-NAN_WEAK_CALLBACK(weakCallback) {
-    lxc_container_put(data.GetParameter());
-}
-
-NAN_INLINE void makeErrorCallback(const Baton *baton) {
-    unsigned int argc = 1;
-
-    Local<Value> argv[argc] = {
-        NanError(baton->error_msg.c_str())
-    };
-
-    baton->callback->Call(argc, argv);
 }
 
 NAN_INLINE lxc_container *unwrap(_NAN_METHOD_ARGS) {
@@ -133,62 +80,15 @@ NAN_METHOD(LXCContainer) {
 
 // New container
 
-void newContainerAsync(uv_work_t *req) {
-    NewBaton *baton = static_cast<NewBaton*>(req->data);
-
-    lxc_container *container = lxc_container_new(baton->name.c_str(),
-            baton->configpath.c_str());
-
-    if (!container) {
-        baton->error_msg = "Failed to create container";
-        baton->error = true;
-    } else if (!container->is_defined(container)) {
-        baton->error_msg = "Container not found";
-        baton->error = true;
-        lxc_container_put(container);
-    } else {
-        baton->container = container;
-    }
-}
-
-void newContainerAfter(uv_work_t *req, int status) {
-    NanScope();
-
-    Baton *baton = static_cast<Baton*>(req->data);
-
-    if (baton->error) {
-        makeErrorCallback(baton);
-    } else {
-        unsigned int argc = 2;
-
-        Local<Object> container = NanNew(constructor)->NewInstance();
-        NanSetInternalFieldPointer(container, 0, baton->container);
-
-        NanMakeWeakPersistent(container, baton->container, &weakCallback);
-
-        Local<Value> argv[argc] = {
-            NanNull(),
-            container
-        };
-
-        baton->callback->Call(argc, argv);
-    }
-
-    delete baton;
-}
-
 NAN_METHOD(newContainer) {
     NanScope();
 
-    NewBaton *baton = new NewBaton;
+    std::string name = *String::Utf8Value(args[0]);
+    std::string path = *String::Utf8Value(args[1]);
 
-    baton->name = std::string(*String::Utf8Value(args[0]));
-    baton->configpath = std::string(*String::Utf8Value(args[1]));
+    NanCallback *callback = new NanCallback(args[2].As<Function>());
 
-    baton->callback = new NanCallback(args[2].As<Function>());
-
-    uv_queue_work(uv_default_loop(), &baton->req,
-            newContainerAsync, newContainerAfter);
+    NanAsyncQueueWorker(new GetWorker(name, path, true, callback));
 
     NanReturnUndefined();
 }
@@ -225,7 +125,6 @@ NAN_METHOD(start) {
 
     NanReturnValue(NanNew(ret));
 }
-
 
 NAN_METHOD(attach) {
     NanScope();
@@ -284,7 +183,7 @@ NAN_METHOD(state) {
 void init(Handle<Object> exports) {
     NanScope();
 
-    on_exit(exitNow, NULL);
+    on_exit(exitIfInAttachedProcess, NULL);
 
     Local<FunctionTemplate>constructorTemplate = NanNew<FunctionTemplate>(LXCContainer);
 
@@ -301,7 +200,6 @@ void init(Handle<Object> exports) {
     // Exports
     exports->Set(NanNew("getContainer"), NanNew<FunctionTemplate>(newContainer)->GetFunction());
     exports->Set(NanNew("waitPids"), NanNew<FunctionTemplate>(waitPids)->GetFunction());
-
 }
 
 NODE_MODULE(lxc, init);
