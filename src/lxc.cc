@@ -3,10 +3,12 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <fcntl.h>
+#include <pty.h>
+#include <utmp.h>
 #include <lxc/lxccontainer.h>
 
 #include <string>
-#include <iostream>
 
 #include <nan.h>
 
@@ -15,15 +17,40 @@
 
 using namespace v8;
 
+struct AttachPayload {
+    char *command;
+    char **args;
+    bool term;
+    int *fds;
+    int fdCount;
+};
+
 // Helper, Cleanup etc.
 
 static int attachFunc(void *payload) {
-    lxc_attach_command_t *command = static_cast<lxc_attach_command_t*>(payload);
+    AttachPayload *options = static_cast<AttachPayload*>(payload);
 
-    execvp(command->program, command->argv);
+    if (options->term) {
+        login_tty(0);
+    }
+
+    for (int i = 3; i < options->fdCount; i++) {
+        int fd = options->fds[i];
+        dup2(fd, i);
+        if (fd != i) {
+            close(fd);
+        }
+    }
+
+    execvp(options->command, options->args);
 
     // if exec fails, exit with code 128 (see GNU conventions)
     return 128;
+}
+
+static inline void setFdFlags(int fd, int flags) {
+    int oldFlags = fcntl(fd, F_GETFD, 0);
+    fcntl(fd, F_SETFD, oldFlags | flags);
 }
 
 NAN_INLINE lxc_container *unwrap(_NAN_METHOD_ARGS) {
@@ -132,37 +159,94 @@ NAN_METHOD(attach) {
 
     lxc_container *container = unwrap(args);
 
-    lxc_attach_options_t options = LXC_ATTACH_OPTIONS_DEFAULT;
-    lxc_attach_command_t command;
+    Local<Object> options = args[2]->ToObject();
+    AttachPayload payload;
 
+    lxc_attach_options_t attachOptions = LXC_ATTACH_OPTIONS_DEFAULT;
+
+    // args
     Local<Array> arguments = args[1].As<Array>();
-    int length = arguments->Length();
+    int argc = arguments->Length() + 2;
 
-    command.program = strdup(*String::Utf8Value(args[0]));
-    command.argv = new char*[length + 2];
+    payload.command = strdup(*String::Utf8Value(args[0]));
+    payload.args = new char*[argc];
 
-    command.argv[0] = command.program;
-    command.argv[length + 1] = NULL;
+    payload.args[0] = payload.command;
+    payload.args[argc - 1] = NULL;
 
-    for (int i = 0; i < length; i++) {
-        command.argv[i + 1] = strdup(*String::Utf8Value(arguments->Get(i)));
+    for (int i = 0; i < argc - 2; i++) {
+        payload.args[i + 1] = strdup(*String::Utf8Value(arguments->Get(i)));
     }
 
+    // env
+    //TODO
+
+    // stdio
+    payload.term = options->Get(NanNew("term"))->BooleanValue();
+    payload.fdCount = options->Get(NanNew("fds"))->Uint32Value() + 3;
+
+    int *parentFds = new int[payload.fdCount];;
+    int *childFds = new int[payload.fdCount];
+    int fdPos = 0;
+
+    if (payload.term) {
+        int master, slave;
+
+        // TODO to be super safe, we should acquire the libuv fork lock for the
+        // openpty and cloexec calls
+        openpty(&master, &slave, NULL, NULL, NULL);
+        setFdFlags(master, FD_CLOEXEC);
+
+        for (/* reusing fdPos */; fdPos < 3; fdPos++) {
+            parentFds[fdPos] = master;
+            childFds[fdPos] = slave;
+        }
+    }
+
+    for (/* reusing fdPos */; fdPos < payload.fdCount; fdPos++) {
+        int fds[2];
+        socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, fds);
+        parentFds[fdPos] = fds[0];
+        childFds[fdPos] = fds[1];
+    }
+
+    attachOptions.stdin_fd = childFds[0];
+    attachOptions.stdout_fd = childFds[1];
+    attachOptions.stderr_fd = childFds[2];
+    payload.fds = childFds;
+
+    // attach
     int pid;
+    int ret = attachWrap(container, attachFunc, &payload, &attachOptions, &pid);
 
-    int ret = attachWrap(container, attachFunc, &command, &options, &pid);
+    // cleanup
+    for (int i = 0; i < argc - 1; i++) {
+        free(payload.args[i]);
+    }
+    //TODO env
 
-    for (int i = 0; i < length + 1; i++) {
-        free(command.argv[i]);
+    delete[] payload.args;
+
+    Local<Object> fdArray = NanNew<Array>();
+
+    for (int i = 0; i < payload.fdCount; i++) {
+        close(childFds[i]);
+        setFdFlags(parentFds[i], O_NONBLOCK);
+        fdArray->Set(i, NanNew<Number>(parentFds[i]));
     }
 
-    delete[] command.argv;
+    delete[] parentFds;
+    delete[] childFds;
 
     Local<Object> result = NanNew<Object>();
 
     if (ret == 0) {
         result->Set(NanNew("pid"), NanNew(pid));
+        result->Set(NanNew("fds"), fdArray);
     } else {
+        for (int i = 0; i < payload.fdCount; i++) {
+            close(parentFds[i]);
+        }
         result->Set(NanNew("error"), NanError("Could not attach to container"));
     }
 

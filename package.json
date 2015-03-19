@@ -5,13 +5,16 @@
   "author": "Johannes Henninger <johannes@henninger.io>",
   "license": "GPL-3.0+",
   "private": true,
-  "os": ["linux"],
+  "os": [
+    "linux"
+  ],
   "main": "lib/lxc.js",
   "engines": {
     "node": ">=0.11.14"
   },
   "dependencies": {
     "bindings": "^1.2.1",
+    "extend": "^2.0.0",
     "nan": "^1.7.0"
   }
 }
