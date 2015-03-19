@@ -179,7 +179,10 @@ NAN_METHOD(attach) {
     }
 
     // env
-    //TODO
+    // TODO
+
+    // cwd
+    attachOptions.initial_cwd = strdup(*String::Utf8Value(options->Get(NanNew("cwd"))));
 
     // stdio
     payload.term = options->Get(NanNew("term"))->BooleanValue();
@@ -193,7 +196,7 @@ NAN_METHOD(attach) {
         int master, slave;
 
         // TODO to be super safe, we should acquire the libuv fork lock for the
-        // openpty and cloexec calls
+        // duration of the openpty and set cloexec calls
         openpty(&master, &slave, NULL, NULL, NULL);
         setFdFlags(master, FD_CLOEXEC);
 
@@ -223,6 +226,7 @@ NAN_METHOD(attach) {
     for (int i = 0; i < argc - 1; i++) {
         free(payload.args[i]);
     }
+    free(attachOptions.initial_cwd);
     //TODO env
 
     delete[] payload.args;
