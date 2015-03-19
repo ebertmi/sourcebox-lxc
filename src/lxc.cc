@@ -179,10 +179,22 @@ NAN_METHOD(attach) {
     }
 
     // env
-    // TODO
+    Local<Array> envPairs = options->Get(NanNew("env")).As<Array>();
+    int envc = envPairs->Length() + 1;
+
+    char **env = new char*[envc];
+    env[envc - 1] = NULL;
+
+    for (int i = 0; i < envc - 1; i++) {
+        env[i] = strdup(*String::Utf8Value(envPairs->Get(i)));
+    }
+
+    attachOptions.env_policy = LXC_ATTACH_CLEAR_ENV;
+    attachOptions.extra_env_vars = env;
 
     // cwd
-    attachOptions.initial_cwd = strdup(*String::Utf8Value(options->Get(NanNew("cwd"))));
+    char *cwd = strdup(*String::Utf8Value(options->Get(NanNew("cwd"))));
+    attachOptions.initial_cwd = cwd;
 
     // stdio
     payload.term = options->Get(NanNew("term"))->BooleanValue();
@@ -213,10 +225,11 @@ NAN_METHOD(attach) {
         childFds[fdPos] = fds[1];
     }
 
+    payload.fds = childFds;
+
     attachOptions.stdin_fd = childFds[0];
     attachOptions.stdout_fd = childFds[1];
     attachOptions.stderr_fd = childFds[2];
-    payload.fds = childFds;
 
     // attach
     int pid;
@@ -226,12 +239,16 @@ NAN_METHOD(attach) {
     for (int i = 0; i < argc - 1; i++) {
         free(payload.args[i]);
     }
-    free(attachOptions.initial_cwd);
-    //TODO env
-
     delete[] payload.args;
 
-    Local<Object> fdArray = NanNew<Array>();
+    free(cwd);
+
+    for (int i = 0; i < envc - 1; i++) {
+        free(env[i]);
+    }
+    delete[] env;
+
+    Local<Object> fdArray = NanNew<Array>(payload.fdCount);
 
     for (int i = 0; i < payload.fdCount; i++) {
         close(childFds[i]);
