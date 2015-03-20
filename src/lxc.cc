@@ -92,6 +92,24 @@ NAN_METHOD(waitPids) {
     NanReturnNull();
 }
 
+NAN_METHOD(resize) {
+    NanScope();
+
+    int fd = args[0]->IntegerValue();
+
+    winsize ws;
+    ws.ws_row = args[1]->Uint32Value();
+    ws.ws_col = args[2]->Uint32Value();
+    ws.ws_xpixel = 0;
+    ws.ws_ypixel = 0;
+
+    if (ioctl(fd, TIOCSWINSZ, &ws) < 0) {
+        NanThrowError(strerror(errno));
+    }
+
+    NanReturnUndefined();
+}
+
 // Constructor
 
 Persistent<Function> constructor;
@@ -306,6 +324,7 @@ void init(Handle<Object> exports) {
     // Exports
     exports->Set(NanNew("getContainer"), NanNew<FunctionTemplate>(newContainer)->GetFunction());
     exports->Set(NanNew("waitPids"), NanNew<FunctionTemplate>(waitPids)->GetFunction());
+    exports->Set(NanNew("resize"), NanNew<FunctionTemplate>(resize)->GetFunction());
 }
 
 NODE_MODULE(lxc, init);
