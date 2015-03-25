@@ -176,6 +176,7 @@ NAN_METHOD(attach) {
     NanScope();
 
     lxc_container *container = unwrap(args);
+    uv_loop_t *loop = uv_default_loop();
 
     Local<Object> options = args[2]->ToObject();
     AttachPayload payload;
@@ -225,10 +226,15 @@ NAN_METHOD(attach) {
     if (payload.term) {
         int master, slave;
 
-        // TODO to be super safe, we should acquire the libuv fork lock for the
-        // duration of the openpty and set cloexec calls
+        // Acquire read lock to prevent the file descriptor from leaking to
+        // other processes before the CLOEXEC flag is set.
+        uv_rwlock_rdlock(&loop->cloexec_lock);
+
         openpty(&master, &slave, NULL, NULL, NULL);
         setFdFlags(master, FD_CLOEXEC);
+        setFdFlags(slave, FD_CLOEXEC);
+
+        uv_rwlock_rdunlock(&loop->cloexec_lock);
 
         for (/* reusing fdPos */; fdPos < 3; fdPos++) {
             parentFds[fdPos] = master;
@@ -251,7 +257,11 @@ NAN_METHOD(attach) {
 
     // attach
     int pid;
+
+    // Acquire write lock to prevent opening new FDs in other threads.
+    uv_rwlock_wrlock(&loop->cloexec_lock);
     int ret = attachWrap(container, attachFunc, &payload, &attachOptions, &pid);
+    uv_rwlock_wrunlock(&loop->cloexec_lock);
 
     // cleanup
     for (int i = 0; i < argc - 1; i++) {
