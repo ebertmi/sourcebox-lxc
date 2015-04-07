@@ -1,57 +1,21 @@
 #include "lxc.h"
 
-#include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <pty.h>
-#include <utmp.h>
+
 #include <lxc/lxccontainer.h>
-
-#include <string>
-
 #include <nan.h>
 
+#include <string>
+#include <vector>
+
 #include "async.h"
-#include "util.h"
 
 using namespace v8;
 
-struct AttachPayload {
-    char *command;
-    char **args;
-    bool term;
-    int *fds;
-    int fdCount;
-};
-
 // Helper, Cleanup etc.
-
-static int attachFunc(void *payload) {
-    AttachPayload *options = static_cast<AttachPayload*>(payload);
-
-    if (options->term) {
-        login_tty(0);
-    }
-
-    for (int i = 3; i < options->fdCount; i++) {
-        int fd = options->fds[i];
-        dup2(fd, i);
-        if (fd != i) {
-            close(fd);
-        }
-    }
-
-    execvp(options->command, options->args);
-
-    // if exec fails, exit with code 128 (see GNU conventions)
-    return 128;
-}
-
-static inline void setFdFlags(int fd, int flags) {
-    int oldFlags = fcntl(fd, F_GETFD, 0);
-    fcntl(fd, F_SETFD, oldFlags | flags);
-}
 
 NAN_INLINE lxc_container *unwrap(_NAN_METHOD_ARGS) {
     void *ptr = NanGetInternalFieldPointer(args.Holder(), 0);
@@ -65,7 +29,7 @@ NAN_METHOD(waitPids) {
     int length = pids->Length();
 
     for (int i = 0; i < length; i++) {
-        int pid = pids->Get(i)->NumberValue();
+        int pid = pids->Get(i)->IntegerValue();
         int status;
 
         // FIXME handle waitpid errors
@@ -126,7 +90,7 @@ NAN_METHOD(LXCContainer) {
 
 // New container
 
-NAN_METHOD(newContainer) {
+NAN_METHOD(getContainer) {
     NanScope();
 
     std::string name = *String::Utf8Value(args[0]);
@@ -174,135 +138,32 @@ NAN_METHOD(start) {
 
 NAN_METHOD(attach) {
     NanScope();
+    // TODO argument error checking
 
     lxc_container *container = unwrap(args);
-    uv_loop_t *loop = uv_default_loop();
 
-    Local<Object> options = args[2]->ToObject();
-    AttachPayload payload;
-
-    lxc_attach_options_t attachOptions = LXC_ATTACH_OPTIONS_DEFAULT;
-
-    // args
+    Local<String> command = args[0]->ToString();
     Local<Array> arguments = args[1].As<Array>();
-    int argc = arguments->Length() + 2;
+    Local<Object> options = args[2]->ToObject();
 
-    payload.command = strdup(*String::Utf8Value(args[0]));
-    payload.args = new char*[argc];
+    NanCallback *callback = new NanCallback(args[3].As<Function>());
 
-    payload.args[0] = payload.command;
-    payload.args[argc - 1] = NULL;
+    AttachWorker *attachWorker = new AttachWorker(container, callback, command, arguments, options);
 
-    for (int i = 0; i < argc - 2; i++) {
-        payload.args[i + 1] = strdup(*String::Utf8Value(arguments->Get(i)));
+    const std::vector<int>& fds = attachWorker->getParentFds();
+    Local<Array> fdArray = NanNew<Array>(fds.size());
+
+    for (unsigned int i = 0; i < fds.size(); i++) {
+        fdArray->Set(i, NanNew<Number>(fds[i]));
     }
 
-    // env
-    Local<Array> envPairs = options->Get(NanNew("env")).As<Array>();
-    int envc = envPairs->Length() + 1;
+    NanAsyncQueueWorker(attachWorker);
 
-    char **env = new char*[envc];
-    env[envc - 1] = NULL;
-
-    for (int i = 0; i < envc - 1; i++) {
-        env[i] = strdup(*String::Utf8Value(envPairs->Get(i)));
-    }
-
-    attachOptions.env_policy = LXC_ATTACH_CLEAR_ENV;
-    attachOptions.extra_env_vars = env;
-
-    // cwd
-    char *cwd = strdup(*String::Utf8Value(options->Get(NanNew("cwd"))));
-    attachOptions.initial_cwd = cwd;
-
-    // stdio
-    payload.term = options->Get(NanNew("term"))->BooleanValue();
-    payload.fdCount = options->Get(NanNew("fds"))->Uint32Value() + 3;
-
-    int *parentFds = new int[payload.fdCount];;
-    int *childFds = new int[payload.fdCount];
-    int fdPos = 0;
-
-    if (payload.term) {
-        int master, slave;
-
-        // Acquire read lock to prevent the file descriptor from leaking to
-        // other processes before the CLOEXEC flag is set.
-        uv_rwlock_rdlock(&loop->cloexec_lock);
-
-        openpty(&master, &slave, NULL, NULL, NULL);
-        setFdFlags(master, FD_CLOEXEC);
-        setFdFlags(slave, FD_CLOEXEC);
-
-        uv_rwlock_rdunlock(&loop->cloexec_lock);
-
-        for (/* reusing fdPos */; fdPos < 3; fdPos++) {
-            parentFds[fdPos] = master;
-            childFds[fdPos] = slave;
-        }
-    }
-
-    for (/* reusing fdPos */; fdPos < payload.fdCount; fdPos++) {
-        int fds[2];
-        socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, fds);
-        parentFds[fdPos] = fds[0];
-        childFds[fdPos] = fds[1];
-    }
-
-    payload.fds = childFds;
-
-    attachOptions.stdin_fd = childFds[0];
-    attachOptions.stdout_fd = childFds[1];
-    attachOptions.stderr_fd = childFds[2];
-
-    // attach
-    int pid;
-
-    // Acquire write lock to prevent opening new FDs in other threads.
-    uv_rwlock_wrlock(&loop->cloexec_lock);
-    int ret = attachWrap(container, attachFunc, &payload, &attachOptions, &pid);
-    uv_rwlock_wrunlock(&loop->cloexec_lock);
-
-    // cleanup
-    for (int i = 0; i < argc - 1; i++) {
-        free(payload.args[i]);
-    }
-    delete[] payload.args;
-
-    free(cwd);
-
-    for (int i = 0; i < envc - 1; i++) {
-        free(env[i]);
-    }
-    delete[] env;
-
-    Local<Object> fdArray = NanNew<Array>(payload.fdCount);
-
-    for (int i = 0; i < payload.fdCount; i++) {
-        close(childFds[i]);
-        setFdFlags(parentFds[i], O_NONBLOCK);
-        fdArray->Set(i, NanNew<Number>(parentFds[i]));
-    }
-
-    delete[] parentFds;
-    delete[] childFds;
-
-    Local<Object> result = NanNew<Object>();
-
-    if (ret == 0) {
-        result->Set(NanNew("pid"), NanNew(pid));
-        result->Set(NanNew("fds"), fdArray);
-    } else {
-        for (int i = 0; i < payload.fdCount; i++) {
-            close(parentFds[i]);
-        }
-        result->Set(NanNew("error"), NanError("Could not attach to container"));
-    }
-
-    NanReturnValue(result);
+    NanReturnValue(fdArray);
 }
 
 // this is just a test, should probably be asynchronous
+// TODO: test how much time this actually takes
 NAN_METHOD(state) {
     NanScope();
 
@@ -317,7 +178,7 @@ NAN_METHOD(state) {
 void init(Handle<Object> exports) {
     NanScope();
 
-    on_exit(exitIfInAttachedProcess, NULL);
+    on_exit(AttachWorker::exitIfInAttachedProcess, NULL);
 
     Local<FunctionTemplate>constructorTemplate = NanNew<FunctionTemplate>(LXCContainer);
 
@@ -332,7 +193,7 @@ void init(Handle<Object> exports) {
     NanAssignPersistent(constructor, constructorTemplate->GetFunction());
 
     // Exports
-    exports->Set(NanNew("getContainer"), NanNew<FunctionTemplate>(newContainer)->GetFunction());
+    exports->Set(NanNew("getContainer"), NanNew<FunctionTemplate>(getContainer)->GetFunction());
     exports->Set(NanNew("waitPids"), NanNew<FunctionTemplate>(waitPids)->GetFunction());
     exports->Set(NanNew("resize"), NanNew<FunctionTemplate>(resize)->GetFunction());
 }

@@ -3,8 +3,7 @@
     "target_name": "lxc",
     "sources": [
       "src/lxc.cc",
-      "src/async.cc",
-      "src/util.cc"
+      "src/async.cc"
     ],
     "libraries": [
       "-lutil",
