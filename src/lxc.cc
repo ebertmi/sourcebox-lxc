@@ -1,28 +1,27 @@
 #include "lxc.h"
 
-#include <sys/wait.h>
-#include <unistd.h>
-#include <fcntl.h>
 #include <pty.h>
-
-#include <lxc/lxccontainer.h>
-#include <nan.h>
+#include <sys/wait.h>
 
 #include <string>
 #include <vector>
 
-#include "async.h"
+#include <lxc/lxccontainer.h>
+#include <nan.h>
+
+#include "get.h"
+#include "attach.h"
 
 using namespace v8;
 
 // Helper, Cleanup etc.
 
-NAN_INLINE lxc_container *unwrap(_NAN_METHOD_ARGS) {
+NAN_INLINE lxc_container *Unwrap(_NAN_METHOD_ARGS) {
     void *ptr = NanGetInternalFieldPointer(args.Holder(), 0);
     return static_cast<lxc_container*>(ptr);
 }
 
-NAN_METHOD(waitPids) {
+NAN_METHOD(WaitPids) {
     NanScope();
 
     Local<Array> pids = args[0].As<Array>();
@@ -56,7 +55,7 @@ NAN_METHOD(waitPids) {
     NanReturnNull();
 }
 
-NAN_METHOD(resize) {
+NAN_METHOD(Resize) {
     NanScope();
 
     int fd = args[0]->IntegerValue();
@@ -76,7 +75,7 @@ NAN_METHOD(resize) {
 
 // Constructor
 
-Persistent<Function> constructor;
+Persistent<Function> containerConstructor;
 
 NAN_METHOD(LXCContainer) {
     NanScope();
@@ -85,12 +84,12 @@ NAN_METHOD(LXCContainer) {
         NanReturnThis();
     }
 
-    NanReturnValue(NanNew(constructor)->NewInstance());
+    NanReturnValue(NanNew(containerConstructor)->NewInstance());
 }
 
-// New container
+// Get container
 
-NAN_METHOD(getContainer) {
+NAN_METHOD(GetContainer) {
     NanScope();
 
     std::string name = *String::Utf8Value(args[0]);
@@ -98,19 +97,19 @@ NAN_METHOD(getContainer) {
 
     NanCallback *callback = new NanCallback(args[2].As<Function>());
 
-    NanAsyncQueueWorker(new GetWorker(name, path, true, callback));
+    NanAsyncQueueWorker(new GetWorker(callback, name, path, true));
 
     NanReturnUndefined();
 }
 
 // Methods
 
-NAN_METHOD(start) {
+NAN_METHOD(Start) {
     NanScope();
     // TODO async is probably required, even when container is daemonized
     // but for testing this will suffice
 
-    lxc_container *container = unwrap(args);
+    lxc_container *container = Unwrap(args);
 
     Local<Array> arguments = args[0].As<Array>();
     int length = arguments->Length();
@@ -136,11 +135,11 @@ NAN_METHOD(start) {
     NanReturnValue(NanNew<Boolean>(ret));
 }
 
-NAN_METHOD(attach) {
+NAN_METHOD(Attach) {
     NanScope();
     // TODO argument error checking
 
-    lxc_container *container = unwrap(args);
+    lxc_container *container = Unwrap(args);
 
     Local<String> command = args[0]->ToString();
     Local<Array> arguments = args[1].As<Array>();
@@ -150,7 +149,7 @@ NAN_METHOD(attach) {
 
     AttachWorker *attachWorker = new AttachWorker(container, callback, command, arguments, options);
 
-    const std::vector<int>& fds = attachWorker->getParentFds();
+    const std::vector<int>& fds = attachWorker->GetParentFds();
     Local<Array> fdArray = NanNew<Array>(fds.size());
 
     for (unsigned int i = 0; i < fds.size(); i++) {
@@ -164,10 +163,10 @@ NAN_METHOD(attach) {
 
 // this is just a test, should probably be asynchronous
 // TODO: test how much time this actually takes
-NAN_METHOD(state) {
+NAN_METHOD(State) {
     NanScope();
 
-    lxc_container *c = unwrap(args);
+    lxc_container *c = Unwrap(args);
     Local<String> state = NanNew(c->state(c));
 
     NanReturnValue(state);
@@ -175,10 +174,10 @@ NAN_METHOD(state) {
 
 // Initialization
 
-void init(Handle<Object> exports) {
+void Init(Handle<Object> exports) {
     NanScope();
 
-    on_exit(AttachWorker::exitIfInAttachedProcess, NULL);
+    on_exit(AttachWorker::ExitIfInAttachedProcess, NULL);
 
     Local<FunctionTemplate>constructorTemplate = NanNew<FunctionTemplate>(LXCContainer);
 
@@ -186,16 +185,16 @@ void init(Handle<Object> exports) {
     constructorTemplate->InstanceTemplate()->SetInternalFieldCount(1);
 
     // Methods
-    NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "start", start);
-    NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "state", state);
-    NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "attach", attach);
+    NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "start", Start);
+    NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "state", State);
+    NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "attach", Attach);
 
-    NanAssignPersistent(constructor, constructorTemplate->GetFunction());
+    NanAssignPersistent(containerConstructor, constructorTemplate->GetFunction());
 
     // Exports
-    exports->Set(NanNew("getContainer"), NanNew<FunctionTemplate>(getContainer)->GetFunction());
-    exports->Set(NanNew("waitPids"), NanNew<FunctionTemplate>(waitPids)->GetFunction());
-    exports->Set(NanNew("resize"), NanNew<FunctionTemplate>(resize)->GetFunction());
+    exports->Set(NanNew("getContainer"), NanNew<FunctionTemplate>(GetContainer)->GetFunction());
+    exports->Set(NanNew("waitPids"), NanNew<FunctionTemplate>(WaitPids)->GetFunction());
+    exports->Set(NanNew("resize"), NanNew<FunctionTemplate>(Resize)->GetFunction());
 }
 
-NODE_MODULE(lxc, init);
+NODE_MODULE(lxc, Init);

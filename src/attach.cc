@@ -1,57 +1,17 @@
-#include "async.h"
+#include "attach.h"
 
 #include <unistd.h>
 #include <pty.h>
 #include <utmp.h>
 
-#include "lxc.h"
-
 using namespace v8;
 
-// vielleicht als static method von getworker
-// oder eine function in lxc.cc haben, die mir das wrapped ding gibt
-NAN_WEAK_CALLBACK(weakCallback) {
-    lxc_container_put(data.GetParameter());
-}
-
-GetWorker::GetWorker(std::string name, std::string path, bool errorIfUndefined, NanCallback *callback)
-    : AsyncWorker(NULL, callback), name(name), path(path), errorIfUndefined(errorIfUndefined) { }
-
-void GetWorker::Execute() {
-    container = lxc_container_new(name.c_str(), path.c_str());
-
-    if (!container) {
-        SetErrorMessage("Failed to create container");
-    } else if (errorIfUndefined && !container->is_defined(container)) {
-        SetErrorMessage("Container not found");
-        lxc_container_put(container);
-    }
-}
-
-void GetWorker::HandleOKCallback() {
-    NanScope();
-
-    Local<Object> wrap = NanNew(constructor)->NewInstance();
-    NanSetInternalFieldPointer(wrap, 0, container);
-
-    NanMakeWeakPersistent(wrap, container, &weakCallback);
-
-    unsigned int argc = 2;
-
-    Local<Value> argv[argc] = {
-        NanNull(),
-        wrap
-    };
-
-    callback->Call(argc, argv);
-}
-
-bool AttachWorker::inAttachedProcess = false;
-
-static inline void setFdFlags(int fd, int flags) {
+static inline void SetFdFlags(int fd, int flags) {
     int oldFlags = fcntl(fd, F_GETFD);
     fcntl(fd, F_SETFD, oldFlags | flags);
 }
+
+bool AttachWorker::inAttachedProcess = false;
 
 AttachWorker::AttachWorker(lxc_container *container, NanCallback *callback, Local<String> command, Local<Array> arguments,
         Local<Object> options) : AsyncWorker(container, callback) {
@@ -95,8 +55,8 @@ AttachWorker::AttachWorker(lxc_container *container, NanCallback *callback, Loca
         uv_rwlock_rdlock(&loop->cloexec_lock);
 
         openpty(&master, &slave, NULL, NULL, NULL);
-        setFdFlags(master, FD_CLOEXEC | O_NONBLOCK);
-        setFdFlags(slave, FD_CLOEXEC);
+        SetFdFlags(master, FD_CLOEXEC | O_NONBLOCK);
+        SetFdFlags(slave, FD_CLOEXEC);
 
         uv_rwlock_rdunlock(&loop->cloexec_lock);
 
@@ -109,7 +69,7 @@ AttachWorker::AttachWorker(lxc_container *container, NanCallback *callback, Loca
     for (/* reusing fdPos */; fdPos < fdCount; fdPos++) {
         int fds[2];
         socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, fds);
-        setFdFlags(fds[0], O_NONBLOCK);
+        SetFdFlags(fds[0], O_NONBLOCK);
         parentFds[fdPos] = fds[0];
         childFds[fdPos] = fds[1];
     }
@@ -127,7 +87,7 @@ AttachWorker::~AttachWorker() {
     }
 }
 
-const std::vector<int>& AttachWorker::getParentFds() const {
+const std::vector<int>& AttachWorker::GetParentFds() const {
     return parentFds;
 }
 
@@ -150,7 +110,7 @@ void AttachWorker::Execute() {
     uv_rwlock_wrlock(&loop->cloexec_lock);
     inAttachedProcess = true;
 
-    int ret = container->attach(container, attachFunc, this, &options, &pid);
+    int ret = container->attach(container, AttachFunction, this, &options, &pid);
     inAttachedProcess = false;
     uv_rwlock_wrunlock(&loop->cloexec_lock);
 
@@ -177,7 +137,7 @@ void AttachWorker::HandleOKCallback() {
 }
 
 // gets called within the container
-int AttachWorker::attachFunc(void *payload) {
+int AttachWorker::AttachFunction(void *payload) {
     AttachWorker *worker = static_cast<AttachWorker*>(payload);
 
     std::vector<int>& fds = worker->childFds;
@@ -204,7 +164,7 @@ int AttachWorker::attachFunc(void *payload) {
     return 128;
 }
 
-void AttachWorker::exitIfInAttachedProcess(int status, void *) {
+void AttachWorker::ExitIfInAttachedProcess(int status, void *) {
     if (inAttachedProcess) {
         _exit(status);
     }

@@ -3,6 +3,6 @@
 
 #include <node.h>
 
-extern v8::Persistent<v8::Function> constructor;
+extern v8::Persistent<v8::Function> containerConstructor;
 
 #endif
