@@ -122,7 +122,7 @@ NAN_METHOD(Start) {
         std::strcpy(array[i], *utf8string);
     }
 
-    array[length] = NULL;
+    array[length] = nullptr;
 
     bool ret = container->start(container, false, array);
 
@@ -177,7 +177,7 @@ NAN_METHOD(State) {
 void Init(Handle<Object> exports) {
     NanScope();
 
-    on_exit(AttachWorker::ExitIfInAttachedProcess, NULL);
+    on_exit(AttachWorker::ExitIfInAttachedProcess, nullptr);
 
     Local<FunctionTemplate>constructorTemplate = NanNew<FunctionTemplate>(LXCContainer);
 
@@ -197,4 +197,4 @@ void Init(Handle<Object> exports) {
     exports->Set(NanNew("resize"), NanNew<FunctionTemplate>(Resize)->GetFunction());
 }
 
-NODE_MODULE(lxc, Init);
+NODE_MODULE(lxc, Init)

@@ -9,7 +9,7 @@ NAN_WEAK_CALLBACK(weakCallback) {
 }
 
 GetWorker::GetWorker(NanCallback *callback, const std::string& name, const std::string& path, bool errorIfUndefined)
-    : AsyncWorker(NULL, callback), name(name), path(path), errorIfUndefined(errorIfUndefined) { }
+    : AsyncWorker(nullptr, callback), name(name), path(path), errorIfUndefined(errorIfUndefined) { }
 
 void GetWorker::Execute() {
     container = lxc_container_new(name.c_str(), path.c_str());
@@ -30,7 +30,7 @@ void GetWorker::HandleOKCallback() {
 
     NanMakeWeakPersistent(wrap, container, &weakCallback);
 
-    unsigned int argc = 2;
+    const int argc = 2;
 
     Local<Value> argv[argc] = {
         NanNull(),

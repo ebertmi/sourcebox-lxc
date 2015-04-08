@@ -9,8 +9,8 @@ public:
             const std::string& path, bool errorIfUndefined);
 
 private:
-    void Execute();
-    void HandleOKCallback();
+    void Execute() override;
+    void HandleOKCallback() override;
 
     std::string name;
     std::string path;

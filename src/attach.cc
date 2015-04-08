@@ -13,12 +13,13 @@ static inline void SetFdFlags(int fd, int flags) {
 
 bool AttachWorker::inAttachedProcess = false;
 
-AttachWorker::AttachWorker(lxc_container *container, NanCallback *callback, Local<String> command, Local<Array> arguments,
+AttachWorker::AttachWorker(lxc_container *container, NanCallback *callback,
+        Local<String> command, Local<Array> arguments,
         Local<Object> options) : AsyncWorker(container, callback) {
     NanScope();
 
     // command & args
-    args.resize(arguments->Length() + 2, NULL);
+    args.resize(arguments->Length() + 2, nullptr);
     args.front() = strdup(*String::Utf8Value(command));
 
     for (unsigned int i = 0; i < args.size() - 2; i++) {
@@ -28,7 +29,7 @@ AttachWorker::AttachWorker(lxc_container *container, NanCallback *callback, Loca
     // env
     Local<Array> envPairs = options->Get(NanNew("env")).As<Array>();
 
-    env.resize(envPairs->Length() + 1, NULL);
+    env.resize(envPairs->Length() + 1, nullptr);
 
     for (unsigned int i = 0; i < env.size() - 1; i++) {
         env[i] = strdup(*String::Utf8Value(envPairs->Get(i)));
@@ -54,7 +55,7 @@ AttachWorker::AttachWorker(lxc_container *container, NanCallback *callback, Loca
         // other processes before the CLOEXEC flag is set.
         uv_rwlock_rdlock(&loop->cloexec_lock);
 
-        openpty(&master, &slave, NULL, NULL, NULL);
+        openpty(&master, &slave, nullptr, nullptr, nullptr);
         SetFdFlags(master, FD_CLOEXEC | O_NONBLOCK);
         SetFdFlags(slave, FD_CLOEXEC);
 
@@ -77,13 +78,13 @@ AttachWorker::AttachWorker(lxc_container *container, NanCallback *callback, Loca
 
 AttachWorker::~AttachWorker() {
     // command & args
-    for (std::vector<char *>::iterator it = args.begin(); it != args.end(); it++) {
-        free(*it);
+    for (char *p: args) {
+        free(p);
     }
 
     // env
-    for (std::vector<char *>::iterator it = env.begin(); it != env.end(); it++) {
-        free(*it);
+    for (char *p: env) {
+        free(p);
     }
 }
 
@@ -99,7 +100,7 @@ void AttachWorker::Execute() {
     options.initial_cwd = const_cast<char*>(cwd.c_str());
 
     options.env_policy = LXC_ATTACH_CLEAR_ENV;
-    options.extra_env_vars = &env[0];
+    options.extra_env_vars = env.data();
 
     options.stdin_fd = childFds[0];
     options.stdout_fd = childFds[1];
@@ -111,11 +112,12 @@ void AttachWorker::Execute() {
     inAttachedProcess = true;
 
     int ret = container->attach(container, AttachFunction, this, &options, &pid);
+
     inAttachedProcess = false;
     uv_rwlock_wrunlock(&loop->cloexec_lock);
 
-    for (std::vector<int>::iterator it = childFds.begin(); it < childFds.end(); it++) {
-        close(*it);
+    for (int fd: childFds) {
+        close(fd);
     }
 
     if (ret == -1) {
@@ -126,7 +128,7 @@ void AttachWorker::Execute() {
 void AttachWorker::HandleOKCallback() {
     NanScope();
 
-    unsigned int argc = 2;
+    const int argc = 2;
 
     Local<Value> argv[argc] = {
         NanNull(),
@@ -140,8 +142,8 @@ void AttachWorker::HandleOKCallback() {
 int AttachWorker::AttachFunction(void *payload) {
     AttachWorker *worker = static_cast<AttachWorker*>(payload);
 
-    std::vector<int>& fds = worker->childFds;
-    std::vector<char*>& args = worker->args;
+    auto& fds = worker->childFds;
+    auto& args = worker->args;
 
     if (worker->term) {
         login_tty(0);
@@ -155,7 +157,7 @@ int AttachWorker::AttachFunction(void *payload) {
         }
     }
 
-    execvp(args.front(), &args.front());
+    execvp(args.front(), args.data());
 
     // if exec fails, print the error to stderr and exit with code 128 (see GNU
     // conventions)

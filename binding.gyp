@@ -10,6 +10,10 @@
       "-lutil",
       "-llxc"
     ],
+    "cflags": [
+      "-std=c++11",
+      "-Wpedantic"
+    ],
     "include_dirs": [
       "<!(node -e \"require('nan')\")"
     ]

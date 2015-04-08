@@ -18,8 +18,8 @@ public:
     static void ExitIfInAttachedProcess(int status, void *);
 
 private:
-    void Execute();
-    void HandleOKCallback();
+    void Execute() override;
+    void HandleOKCallback() override;
 
     static int AttachFunction(void *payload);
 
