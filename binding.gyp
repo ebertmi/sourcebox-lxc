@@ -4,7 +4,8 @@
     "sources": [
       "src/lxc.cc",
       "src/get.cc",
-      "src/attach.cc"
+      "src/attach.cc",
+      "src/destroy.cc"
     ],
     "libraries": [
       "-lutil",

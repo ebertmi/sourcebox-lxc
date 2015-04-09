@@ -11,6 +11,7 @@
 
 #include "get.h"
 #include "attach.h"
+#include "destroy.h"
 
 using namespace v8;
 
@@ -166,10 +167,20 @@ NAN_METHOD(Attach) {
 NAN_METHOD(State) {
     NanScope();
 
-    lxc_container *c = Unwrap(args);
-    Local<String> state = NanNew(c->state(c));
+    lxc_container *container = Unwrap(args);
+    Local<String> state = NanNew(container->state(container));
 
     NanReturnValue(state);
+}
+
+NAN_METHOD(Destroy) {
+    NanScope();
+
+    lxc_container *container = Unwrap(args);
+
+    NanCallback *callback = new NanCallback(args[0].As<Function>());
+
+    NanAsyncQueueWorker(new DestroyWorker(container, callback));
 }
 
 // Initialization
@@ -188,6 +199,7 @@ void Init(Handle<Object> exports) {
     NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "start", Start);
     NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "state", State);
     NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "attach", Attach);
+    NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "destroy", Destroy);
 
     NanAssignPersistent(containerConstructor, constructorTemplate->GetFunction());
 
