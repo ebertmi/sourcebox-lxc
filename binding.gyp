@@ -5,6 +5,7 @@
       "src/lxc.cc",
       "src/get.cc",
       "src/attach.cc",
+      "src/stop.cc",
       "src/destroy.cc"
     ],
     "libraries": [
