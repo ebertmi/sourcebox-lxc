@@ -2,8 +2,10 @@
 
 using namespace v8;
 
-void StopWorker::Execute() {
-    if (!container->stop(container)) {
+void StopWorker::LxcExecute() {
+    if (!container->is_running(container)) {
+        SetErrorMessage("Container is not running");
+    } else if (!container->stop(container)) {
         SetErrorMessage("Failed to stop container");
     }
 }

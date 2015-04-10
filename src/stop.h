@@ -3,12 +3,12 @@
 
 #include "async.h"
 
-class StopWorker : public AsyncWorker {
+class StopWorker : public LxcWorker {
 public:
-    using AsyncWorker::AsyncWorker;
+    using LxcWorker::LxcWorker;
 
 private:
-    void Execute() override;
+    void LxcExecute() override;
 };
 
 #endif

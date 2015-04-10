@@ -26,7 +26,7 @@ bool AttachWorker::inAttachedProcess = false;
 
 AttachWorker::AttachWorker(lxc_container *container, NanCallback *callback,
         Local<String> command, Local<Array> arguments,
-        Local<Object> options) : AsyncWorker(container, callback) {
+        Local<Object> options) : LxcWorker(container, callback) {
     NanScope();
 
     // command & args
@@ -99,13 +99,24 @@ AttachWorker::~AttachWorker() {
     for (char *p: env) {
         free(p);
     }
+
+    // stdio
+    for (int fd: childFds) {
+        close(fd);
+    }
+
 }
 
 const std::vector<int>& AttachWorker::GetParentFds() const {
     return parentFds;
 }
 
-void AttachWorker::Execute() {
+void AttachWorker::LxcExecute() {
+    if (!container->is_running(container)) {
+        SetErrorMessage("Container is not running");
+        return;
+    }
+
     uv_loop_t *loop = uv_default_loop();
 
     lxc_attach_options_t options = LXC_ATTACH_OPTIONS_DEFAULT;
@@ -128,10 +139,6 @@ void AttachWorker::Execute() {
 
     inAttachedProcess = false;
     uv_rwlock_wrunlock(&loop->cloexec_lock);
-
-    for (int fd: childFds) {
-        close(fd);
-    }
 
     if (ret == -1) {
         SetErrorMessage("Could not attach to container");

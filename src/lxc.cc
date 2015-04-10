@@ -149,7 +149,8 @@ NAN_METHOD(Attach) {
 
     NanCallback *callback = new NanCallback(args[3].As<Function>());
 
-    AttachWorker *attachWorker = new AttachWorker(container, callback, command, arguments, options);
+    AttachWorker *attachWorker = new AttachWorker(container, callback,
+            command, arguments, options);
 
     const std::vector<int>& fds = attachWorker->GetParentFds();
     Local<Array> fdArray = NanNew<Array>(fds.size());
