@@ -4,10 +4,6 @@
 
 using namespace v8;
 
-NAN_WEAK_CALLBACK(weakCallback) {
-    lxc_container_put(data.GetParameter());
-}
-
 GetWorker::GetWorker(NanCallback *callback, const std::string& name, const std::string& path, bool errorIfUndefined)
     : AsyncWorker(nullptr, callback), name(name), path(path), errorIfUndefined(errorIfUndefined) { }
 
@@ -25,10 +21,7 @@ void GetWorker::Execute() {
 void GetWorker::HandleOKCallback() {
     NanScope();
 
-    Local<Object> wrap = NanNew(containerConstructor)->NewInstance();
-    NanSetInternalFieldPointer(wrap, 0, container);
-
-    NanMakeWeakPersistent(wrap, container, &weakCallback);
+    Local<Object> wrap = Wrap(container);
 
     const int argc = 2;
 

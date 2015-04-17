@@ -15,8 +15,6 @@ public:
 
     const std::vector<int>& GetParentFds() const;
 
-    static void ExitIfInAttachedProcess(int status, void *);
-
 private:
     void LxcExecute() override;
     void HandleOKCallback() override;
@@ -30,8 +28,6 @@ private:
     std::vector<int> parentFds;
     std::string cwd;
     bool term;
-
-    static bool inAttachedProcess;
 };
 
 #endif

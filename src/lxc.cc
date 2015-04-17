@@ -1,12 +1,12 @@
 #include "lxc.h"
 
 #include <pty.h>
+#include <unistd.h>
 #include <sys/wait.h>
 
 #include <string>
 #include <vector>
 
-#include <lxc/lxccontainer.h>
 #include <nan.h>
 
 #include "get.h"
@@ -16,11 +16,34 @@
 
 using namespace v8;
 
+Persistent<Function> containerConstructor;
+
+pid_t pid = getpid();
+
 // Helper, Cleanup etc.
+
+void ExitHandler(int status, void *) {
+    if (getpid() != pid) {
+        // this is not the main process, exit right away
+        _exit(status);
+    }
+}
+
+NAN_WEAK_CALLBACK(weakCallback) {
+    lxc_container_put(data.GetParameter());
+}
 
 NAN_INLINE lxc_container *Unwrap(_NAN_METHOD_ARGS) {
     void *ptr = NanGetInternalFieldPointer(args.Holder(), 0);
     return static_cast<lxc_container*>(ptr);
+}
+
+Local<Object> Wrap(lxc_container *container) {
+    Local<Object> wrap = NanNew(containerConstructor)->NewInstance();
+    NanSetInternalFieldPointer(wrap, 0, container);
+
+    NanMakeWeakPersistent(wrap, container, &weakCallback);
+    return wrap;
 }
 
 NAN_METHOD(WaitPids) {
@@ -76,8 +99,6 @@ NAN_METHOD(Resize) {
 }
 
 // Constructor
-
-Persistent<Function> containerConstructor;
 
 NAN_METHOD(LXCContainer) {
     NanScope();
@@ -200,7 +221,7 @@ NAN_METHOD(Destroy) {
 void Init(Handle<Object> exports) {
     NanScope();
 
-    on_exit(AttachWorker::ExitIfInAttachedProcess, nullptr);
+    on_exit(ExitHandler, nullptr);
 
     Local<FunctionTemplate>constructorTemplate = NanNew<FunctionTemplate>(LXCContainer);
 

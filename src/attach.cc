@@ -22,8 +22,6 @@ static inline int SetFlFlags(int fd, int flags) {
     return fcntl(fd, F_SETFL, oldFlags | flags);
 }
 
-bool AttachWorker::inAttachedProcess = false;
-
 AttachWorker::AttachWorker(lxc_container *container, NanCallback *callback,
         Local<String> command, Local<Array> arguments,
         Local<Object> options) : LxcWorker(container, callback) {
@@ -131,13 +129,8 @@ void AttachWorker::LxcExecute() {
     options.stderr_fd = childFds[2];
 
     // Acquire write lock to prevent opening new FDs in other threads.
-    // Also serves as a mutex for inAttachedProcess.
     uv_rwlock_wrlock(&loop->cloexec_lock);
-    inAttachedProcess = true;
-
     int ret = container->attach(container, AttachFunction, this, &options, &pid);
-
-    inAttachedProcess = false;
     uv_rwlock_wrunlock(&loop->cloexec_lock);
 
     if (ret == -1) {
@@ -184,10 +177,4 @@ int AttachWorker::AttachFunction(void *payload) {
     perror(args.front());
 
     return 128;
-}
-
-void AttachWorker::ExitIfInAttachedProcess(int status, void *) {
-    if (inAttachedProcess) {
-        _exit(status);
-    }
 }
