@@ -7,7 +7,8 @@
       "src/get.cc",
       "src/attach.cc",
       "src/stop.cc",
-      "src/destroy.cc"
+      "src/destroy.cc",
+      "src/clone.cc"
     ],
     "libraries": [
       "-lutil",

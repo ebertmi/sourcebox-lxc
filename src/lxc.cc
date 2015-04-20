@@ -10,19 +10,20 @@
 #include <nan.h>
 
 #include "get.h"
-#include "attach.h"
 #include "stop.h"
 #include "destroy.h"
+#include "clone.h"
+#include "attach.h"
 
 using namespace v8;
 
 Persistent<Function> containerConstructor;
 
-pid_t pid = getpid();
+static const pid_t pid = getpid();
 
 // Helper, Cleanup etc.
 
-void ExitHandler(int status, void *) {
+static void ExitHandler(int status, void *) {
     if (getpid() != pid) {
         // this is not the main process, exit right away
         _exit(status);
@@ -158,6 +159,44 @@ NAN_METHOD(Start) {
     NanReturnValue(NanNew<Boolean>(ret));
 }
 
+NAN_METHOD(Stop) {
+    NanScope();
+
+    lxc_container *container = Unwrap(args);
+
+    NanCallback *callback = new NanCallback(args[0].As<Function>());
+
+    NanAsyncQueueWorker(new StopWorker(container, callback));
+}
+
+NAN_METHOD(Destroy) {
+    NanScope();
+
+    lxc_container *container = Unwrap(args);
+
+    NanCallback *callback = new NanCallback(args[0].As<Function>());
+
+    NanAsyncQueueWorker(new DestroyWorker(container, callback));
+}
+
+void exitnow(int status, void *) {
+    _exit(status);
+}
+
+NAN_METHOD(Clone) {
+    NanScope();
+
+    lxc_container *container = Unwrap(args);
+    container->set_config_item(container, "lxc.loglevel", "1");
+
+    Local<String> name = args[0]->ToString();
+    Local<Object> options = args[1]->ToObject();
+
+    NanCallback *callback = new NanCallback(args[2].As<Function>());
+
+    NanAsyncQueueWorker(new CloneWorker(container, callback, name, options));
+}
+
 NAN_METHOD(Attach) {
     NanScope();
     // TODO argument error checking
@@ -196,26 +235,6 @@ NAN_METHOD(State) {
     NanReturnValue(state);
 }
 
-NAN_METHOD(Stop) {
-    NanScope();
-
-    lxc_container *container = Unwrap(args);
-
-    NanCallback *callback = new NanCallback(args[0].As<Function>());
-
-    NanAsyncQueueWorker(new StopWorker(container, callback));
-}
-
-NAN_METHOD(Destroy) {
-    NanScope();
-
-    lxc_container *container = Unwrap(args);
-
-    NanCallback *callback = new NanCallback(args[0].As<Function>());
-
-    NanAsyncQueueWorker(new DestroyWorker(container, callback));
-}
-
 // Initialization
 
 void Init(Handle<Object> exports) {
@@ -230,10 +249,11 @@ void Init(Handle<Object> exports) {
 
     // Methods
     NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "start", Start);
-    NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "state", State);
-    NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "attach", Attach);
     NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "stop", Stop);
     NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "destroy", Destroy);
+    NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "clone", Clone);
+    NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "state", State);
+    NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "attach", Attach);
 
     NanAssignPersistent(containerConstructor, constructorTemplate->GetFunction());
 
