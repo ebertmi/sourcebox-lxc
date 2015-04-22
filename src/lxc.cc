@@ -10,6 +10,7 @@
 #include <nan.h>
 
 #include "get.h"
+#include "start.h"
 #include "stop.h"
 #include "destroy.h"
 #include "clone.h"
@@ -130,33 +131,16 @@ NAN_METHOD(GetContainer) {
 
 NAN_METHOD(Start) {
     NanScope();
-    // TODO async is probably required, even when container is daemonized
-    // but for testing this will suffice
 
     lxc_container *container = Unwrap(args);
 
     Local<Array> arguments = args[0].As<Array>();
-    int length = arguments->Length();
 
-    char **array = new char*[length + 1];
+    NanCallback *callback = new NanCallback(args[1].As<Function>());
 
-    for (int i = 0; i < length; i++) {
-        String::Utf8Value utf8string(arguments->Get(i));
-        array[i] = new char[utf8string.length() + 1];
-        std::strcpy(array[i], *utf8string);
-    }
+    NanAsyncQueueWorker(new StartWorker(container, callback, arguments));
 
-    array[length] = nullptr;
-
-    bool ret = container->start(container, false, array);
-
-    for (int i = 0; i < length; i++) {
-        delete[] array[i];
-    }
-
-    delete[] array;
-
-    NanReturnValue(NanNew<Boolean>(ret));
+    NanReturnUndefined();
 }
 
 NAN_METHOD(Stop) {
@@ -167,6 +151,8 @@ NAN_METHOD(Stop) {
     NanCallback *callback = new NanCallback(args[0].As<Function>());
 
     NanAsyncQueueWorker(new StopWorker(container, callback));
+
+    NanReturnUndefined();
 }
 
 NAN_METHOD(Destroy) {
@@ -177,6 +163,8 @@ NAN_METHOD(Destroy) {
     NanCallback *callback = new NanCallback(args[0].As<Function>());
 
     NanAsyncQueueWorker(new DestroyWorker(container, callback));
+
+    NanReturnUndefined();
 }
 
 void exitnow(int status, void *) {

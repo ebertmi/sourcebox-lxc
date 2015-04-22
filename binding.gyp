@@ -5,10 +5,11 @@
       "src/lxc.cc",
       "src/async.cc",
       "src/get.cc",
-      "src/attach.cc",
+      "src/start.cc",
       "src/stop.cc",
       "src/destroy.cc",
-      "src/clone.cc"
+      "src/clone.cc",
+      "src/attach.cc"
     ],
     "libraries": [
       "-lutil",
