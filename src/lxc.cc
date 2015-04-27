@@ -35,18 +35,22 @@ NAN_WEAK_CALLBACK(weakCallback) {
     lxc_container_put(data.GetParameter());
 }
 
-NAN_INLINE lxc_container *Unwrap(_NAN_METHOD_ARGS) {
-    void *ptr = NanGetInternalFieldPointer(args.Holder(), 0);
-    return static_cast<lxc_container*>(ptr);
-}
-
 Local<Object> Wrap(lxc_container *container) {
+    NanEscapableScope();
+
     Local<Object> wrap = NanNew(containerConstructor)->NewInstance();
     NanSetInternalFieldPointer(wrap, 0, container);
 
     NanMakeWeakPersistent(wrap, container, &weakCallback);
-    return wrap;
+
+    return NanEscapeScope(wrap);
 }
+
+NAN_INLINE lxc_container *Unwrap(Local<Object> object) {
+    void *ptr = NanGetInternalFieldPointer(object, 0);
+    return static_cast<lxc_container*>(ptr);
+}
+
 
 NAN_METHOD(WaitPids) {
     NanScope();
@@ -55,13 +59,16 @@ NAN_METHOD(WaitPids) {
     int length = pids->Length();
 
     for (int i = 0; i < length; i++) {
-        int pid = pids->Get(i)->IntegerValue();
+        int pid = pids->Get(i)->Int32Value();
         int status;
 
+        int ret = waitpid(pid, &status, WNOHANG);
+
         // FIXME handle waitpid errors
-        if (waitpid(pid, &status, WNOHANG) > 0) {
+
+        if (ret > 0) {
             Local<Object> result = NanNew<Object>();
-            result->Set(NanNew("pid"), NanNew(pid));
+            result->Set(NanNew("pid"), NanNew(ret));
 
             if (WIFEXITED(status)) {
                 int exitCode = WEXITSTATUS(status);
@@ -85,7 +92,11 @@ NAN_METHOD(WaitPids) {
 NAN_METHOD(Resize) {
     NanScope();
 
-    int fd = args[0]->IntegerValue();
+    if (!args[0]->IsUint32() || !args[1]->IsUint32() || !args[1]->IsUint32()) {
+        NanThrowTypeError("Invalid argument");
+    }
+
+    int fd = args[0]->Uint32Value();
 
     winsize ws;
     ws.ws_row = args[1]->Uint32Value();
@@ -117,6 +128,10 @@ NAN_METHOD(LXCContainer) {
 NAN_METHOD(GetContainer) {
     NanScope();
 
+    if (!args[0]->IsString() && !args[1]->IsString()) {
+        NanThrowTypeError("Invalid argument");
+    }
+
     std::string name = *String::Utf8Value(args[0]);
     std::string path = *String::Utf8Value(args[1]);
 
@@ -132,10 +147,13 @@ NAN_METHOD(GetContainer) {
 NAN_METHOD(Start) {
     NanScope();
 
-    lxc_container *container = Unwrap(args);
+    if (!args[0]->IsArray() || !args[1]->IsFunction()) {
+        NanThrowTypeError("Invalid argument");
+    }
+
+    lxc_container *container = Unwrap(args.Holder());
 
     Local<Array> arguments = args[0].As<Array>();
-
     NanCallback *callback = new NanCallback(args[1].As<Function>());
 
     NanAsyncQueueWorker(new StartWorker(container, callback, arguments));
@@ -146,7 +164,11 @@ NAN_METHOD(Start) {
 NAN_METHOD(Stop) {
     NanScope();
 
-    lxc_container *container = Unwrap(args);
+    if (!args[0]->IsFunction()) {
+        NanThrowTypeError("Invalid argument");
+    }
+
+    lxc_container *container = Unwrap(args.Holder());
 
     NanCallback *callback = new NanCallback(args[0].As<Function>());
 
@@ -158,7 +180,11 @@ NAN_METHOD(Stop) {
 NAN_METHOD(Destroy) {
     NanScope();
 
-    lxc_container *container = Unwrap(args);
+    if (!args[0]->IsFunction()) {
+        NanThrowTypeError("Invalid argument");
+    }
+
+    lxc_container *container = Unwrap(args.Holder());
 
     NanCallback *callback = new NanCallback(args[0].As<Function>());
 
@@ -174,12 +200,14 @@ void exitnow(int status, void *) {
 NAN_METHOD(Clone) {
     NanScope();
 
-    lxc_container *container = Unwrap(args);
-    container->set_config_item(container, "lxc.loglevel", "1");
+    if (!args[0]->IsString() || !args[1]->IsObject() || !args[2]->IsFunction()) {
+        NanThrowTypeError("Invalid argument");
+    }
+
+    lxc_container *container = Unwrap(args.Holder());
 
     Local<String> name = args[0]->ToString();
     Local<Object> options = args[1]->ToObject();
-
     NanCallback *callback = new NanCallback(args[2].As<Function>());
 
     NanAsyncQueueWorker(new CloneWorker(container, callback, name, options));
@@ -187,9 +215,13 @@ NAN_METHOD(Clone) {
 
 NAN_METHOD(Attach) {
     NanScope();
-    // TODO argument error checking
 
-    lxc_container *container = Unwrap(args);
+    if (!args[0]->IsString() || !args[1]->IsArray() ||
+            !args[2]->IsObject() || !args[3]->IsFunction()) {
+        NanThrowTypeError("Invalid argument");
+    }
+
+    lxc_container *container = Unwrap(args.Holder());
 
     Local<String> command = args[0]->ToString();
     Local<Array> arguments = args[1].As<Array>();
@@ -200,11 +232,11 @@ NAN_METHOD(Attach) {
     AttachWorker *attachWorker = new AttachWorker(container, callback,
             command, arguments, options);
 
-    const std::vector<int>& fds = attachWorker->GetParentFds();
+    auto& fds = attachWorker->GetParentFds();
     Local<Array> fdArray = NanNew<Array>(fds.size());
 
     for (unsigned int i = 0; i < fds.size(); i++) {
-        fdArray->Set(i, NanNew<Number>(fds[i]));
+        fdArray->Set(i, NanNew<Integer>(fds[i]));
     }
 
     NanAsyncQueueWorker(attachWorker);
@@ -217,7 +249,7 @@ NAN_METHOD(Attach) {
 NAN_METHOD(State) {
     NanScope();
 
-    lxc_container *container = Unwrap(args);
+    lxc_container *container = Unwrap(args.Holder());
     Local<String> state = NanNew(container->state(container));
 
     NanReturnValue(state);

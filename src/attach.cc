@@ -27,6 +27,14 @@ AttachWorker::AttachWorker(lxc_container *container, NanCallback *callback,
         Local<Object> options) : LxcWorker(container, callback) {
     NanScope();
 
+    Local<Value> envValue = options->Get(NanNew("env"));
+    Local<Value> cwdValue = options->Get(NanNew("cwd"));
+    Local<Value> fdValue = options->Get(NanNew("fds"));
+
+    if (!envValue->IsArray() || !cwdValue->IsString() || !fdValue->IsUint32()) {
+        NanThrowTypeError("Invalid argument");
+    }
+
     // command & args
     args.resize(arguments->Length() + 2, nullptr);
     args.front() = strdup(*String::Utf8Value(command));
@@ -36,7 +44,7 @@ AttachWorker::AttachWorker(lxc_container *container, NanCallback *callback,
     }
 
     // env
-    Local<Array> envPairs = options->Get(NanNew("env")).As<Array>();
+    Local<Array> envPairs = envValue.As<Array>();
 
     env.resize(envPairs->Length() + 1, nullptr);
 
@@ -49,7 +57,7 @@ AttachWorker::AttachWorker(lxc_container *container, NanCallback *callback,
 
     // stdio
     term = options->Get(NanNew("term"))->BooleanValue();
-    int fdCount = options->Get(NanNew("fds"))->Uint32Value() + 3;
+    int fdCount = fdValue->Uint32Value() + 3;
 
     childFds.resize(fdCount);
     parentFds.resize(fdCount);
