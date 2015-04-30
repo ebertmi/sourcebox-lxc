@@ -123,25 +123,6 @@ NAN_METHOD(LXCContainer) {
     NanReturnValue(NanNew(containerConstructor)->NewInstance());
 }
 
-// Get container
-
-NAN_METHOD(GetContainer) {
-    NanScope();
-
-    if (!args[0]->IsString() && !args[1]->IsString()) {
-        NanThrowTypeError("Invalid argument");
-    }
-
-    std::string name = *String::Utf8Value(args[0]);
-    std::string path = *String::Utf8Value(args[1]);
-
-    NanCallback *callback = new NanCallback(args[2].As<Function>());
-
-    NanAsyncQueueWorker(new GetWorker(callback, name, path, true));
-
-    NanReturnUndefined();
-}
-
 // Methods
 
 NAN_METHOD(Start) {
@@ -191,10 +172,6 @@ NAN_METHOD(Destroy) {
     NanAsyncQueueWorker(new DestroyWorker(container, callback));
 
     NanReturnUndefined();
-}
-
-void exitnow(int status, void *) {
-    _exit(status);
 }
 
 NAN_METHOD(Clone) {
