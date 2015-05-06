@@ -4,6 +4,10 @@
 #include <pty.h>
 #include <utmp.h>
 
+#if NAUV_UVVERSION >= 0x000b14
+#define UV_CLOEXEC_LOCK
+#endif
+
 using namespace v8;
 
 static inline int SetFdFlags(int fd, int flags) {
@@ -66,17 +70,22 @@ AttachWorker::AttachWorker(lxc_container *container, NanCallback *callback,
 
     if (term) {
         int master, slave;
-        uv_loop_t *loop = uv_default_loop();
 
+#ifdef UV_CLOEXEC_LOCK
         // Acquire read lock to prevent the file descriptor from leaking to
         // other processes before the FD_CLOEXEC flag is set.
+        uv_loop_t *loop = uv_default_loop();
         uv_rwlock_rdlock(&loop->cloexec_lock);
+#endif
 
         openpty(&master, &slave, nullptr, nullptr, nullptr);
+
         SetFdFlags(master, FD_CLOEXEC);
         SetFdFlags(slave, FD_CLOEXEC);
 
+#ifdef UV_CLOEXEC_LOCK
         uv_rwlock_rdunlock(&loop->cloexec_lock);
+#endif
 
         SetFlFlags(master, O_NONBLOCK);
 
@@ -123,7 +132,6 @@ void AttachWorker::LxcExecute() {
         return;
     }
 
-    uv_loop_t *loop = uv_default_loop();
 
     lxc_attach_options_t options = LXC_ATTACH_OPTIONS_DEFAULT;
 
@@ -136,10 +144,17 @@ void AttachWorker::LxcExecute() {
     options.stdout_fd = childFds[1];
     options.stderr_fd = childFds[2];
 
+#ifdef UV_CLOEXEC_LOCK
     // Acquire write lock to prevent opening new FDs in other threads.
+    uv_loop_t *loop = uv_default_loop();
     uv_rwlock_wrlock(&loop->cloexec_lock);
+#endif
+
     int ret = container->attach(container, AttachFunction, this, &options, &pid);
+
+#ifdef UV_CLOEXEC_LOCK
     uv_rwlock_wrunlock(&loop->cloexec_lock);
+#endif
 
     if (ret == -1) {
         SetErrorMessage("Could not attach to container");
