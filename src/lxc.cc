@@ -51,6 +51,7 @@ NAN_INLINE lxc_container *Unwrap(Local<Object> object) {
     return static_cast<lxc_container*>(ptr);
 }
 
+// Javascript Functions
 
 NAN_METHOD(WaitPids) {
     NanScope();
@@ -188,6 +189,8 @@ NAN_METHOD(Clone) {
     NanCallback *callback = new NanCallback(args[2].As<Function>());
 
     NanAsyncQueueWorker(new CloneWorker(container, callback, name, options));
+
+    NanReturnUndefined();
 }
 
 NAN_METHOD(Attach) {
@@ -232,6 +235,116 @@ NAN_METHOD(State) {
     NanReturnValue(state);
 }
 
+NAN_METHOD(GetKeys) {
+    NanScope();
+
+    lxc_container *container = Unwrap(args.Holder());
+
+    int len = container->get_keys(container, nullptr, nullptr, 0);
+
+    if (len < 0) {
+        NanThrowError("Unable to read configuration keys");
+    }
+
+    char *buffer = new char[len + 1];
+
+    if (container->get_keys(container, nullptr, buffer, len + 1) != len) {
+        delete[] buffer;
+        NanThrowError("Unable to read configuration keys");
+    }
+
+    Local<String> keys = NanNew(buffer);
+    delete[] buffer;
+
+    NanReturnValue(keys);
+}
+
+NAN_METHOD(GetConfigItem) {
+    NanScope();
+
+    if (!args[0]->IsString()) {
+        NanThrowTypeError("Invalid argument");
+    }
+
+    lxc_container *container = Unwrap(args.Holder());
+
+    String::Utf8Value key(args[0]);
+
+    int len = container->get_config_item(container, *key, nullptr, 0);
+
+    if (len < 0) {
+        NanThrowError("Invalid configuration key");
+    }
+
+    if (len == 0) {
+        NanReturnValue("");
+    }
+
+    char *buffer = new char[len + 1];
+
+    if (container->get_config_item(container, *key, buffer, len + 1) != len) {
+        delete[] buffer;
+        NanThrowError("Unable to read configuration value");
+    }
+
+    Local<String> value = NanNew<String>(buffer);
+    delete[] buffer;
+
+    NanReturnValue(value);
+}
+
+NAN_METHOD(SetConfigItem) {
+    NanScope();
+
+    if (!args[0]->IsString() || !args[1]->IsString()) {
+        NanThrowTypeError("Invalid argument");
+    }
+
+    lxc_container *container = Unwrap(args.Holder());
+
+    String::Utf8Value key(args[0]);
+    String::Utf8Value value(args[1]);
+
+    bool ret = container->set_config_item(container, *key, *value);
+
+    NanReturnValue(ret);
+}
+
+NAN_METHOD(ClearConfigItem) {
+    NanScope();
+
+    if (!args[0]->IsString()) {
+        NanThrowTypeError("Invalid argument");
+    }
+
+    lxc_container *container = Unwrap(args.Holder());
+
+    String::Utf8Value key(args[0]);
+
+    bool ret = container->clear_config_item(container, *key);
+
+    NanReturnValue(ret);
+}
+
+// Get container
+
+NAN_METHOD(GetContainer) {
+    NanScope();
+
+    if (!args[0]->IsString() && !args[1]->IsString()) {
+        NanThrowTypeError("Invalid argument");
+    }
+
+    String::Utf8Value name(args[0]);
+    String::Utf8Value path(args[1]);
+
+    NanCallback *callback = new NanCallback(args[2].As<Function>());
+
+    NanAsyncQueueWorker(new GetWorker(callback, *name, *path, true));
+
+    NanReturnUndefined();
+}
+
 // Initialization
 
 void Init(Handle<Object> exports) {
@@ -249,8 +362,15 @@ void Init(Handle<Object> exports) {
     NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "stop", Stop);
     NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "destroy", Destroy);
     NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "clone", Clone);
+
     NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "state", State);
     NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "attach", Attach);
+
+    NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "getKeys", GetKeys);
+    NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "getConfigItem", GetConfigItem);
+    NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "setConfigItem", SetConfigItem);
+    NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "clearConfigItem", ClearConfigItem);
+
 
     NanAssignPersistent(containerConstructor, constructorTemplate->GetFunction());
 
