@@ -296,7 +296,7 @@ NAN_METHOD(GetConfigItem) {
 NAN_METHOD(SetConfigItem) {
     NanScope();
 
-    if (!args[0]->IsString() || !args[1]->IsString()) {
+    if (!args[0]->IsString() || !(args[1]->IsString() || args[1]->IsNumber())) {
         NanThrowTypeError("Invalid argument");
     }
 
@@ -322,6 +322,53 @@ NAN_METHOD(ClearConfigItem) {
     String::Utf8Value key(args[0]);
 
     bool ret = container->clear_config_item(container, *key);
+
+    NanReturnValue(ret);
+}
+
+NAN_METHOD(GetCgroupItem) {
+    NanScope();
+
+    if (!args[0]->IsString()) {
+        NanThrowTypeError("Invalid argument");
+    }
+
+    lxc_container *container = Unwrap(args.Holder());
+
+    String::Utf8Value key(args[0]);
+
+    int len = container->get_cgroup_item(container, *key, nullptr, 0);
+
+    if (len < 0) {
+        NanThrowError("Invalid cgroup key or container not running");
+    }
+
+    char *buffer = new char[len + 1];
+
+    if (container->get_cgroup_item(container, *key, buffer, len + 1) != len) {
+        delete[] buffer;
+        NanThrowError("Unable to read cgroup value");
+    }
+
+    Local<String> value = NanNew(buffer);
+    delete[] buffer;
+
+    NanReturnValue(value);
+}
+
+NAN_METHOD(SetCgroupItem) {
+    NanScope();
+
+    if (!args[0]->IsString() || !(args[1]->IsString() || args[1]->IsNumber())) {
+        NanThrowTypeError("Invalid argument");
+    }
+
+    lxc_container *container = Unwrap(args.Holder());
+
+    String::Utf8Value key(args[0]);
+    String::Utf8Value value(args[1]);
+
+    bool ret = container->set_cgroup_item(container, *key, *value);
 
     NanReturnValue(ret);
 }
@@ -371,6 +418,8 @@ void Init(Handle<Object> exports) {
     NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "setConfigItem", SetConfigItem);
     NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "clearConfigItem", ClearConfigItem);
 
+    NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "getCgroupItem", GetCgroupItem);
+    NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "setCgroupItem", SetCgroupItem);
 
     NanAssignPersistent(containerConstructor, constructorTemplate->GetFunction());
 
