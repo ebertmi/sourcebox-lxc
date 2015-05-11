@@ -326,6 +326,29 @@ NAN_METHOD(ClearConfigItem) {
     NanReturnValue(ret);
 }
 
+NAN_METHOD(GetRunningConfigItem) {
+    NanScope();
+
+    if (!args[0]->IsString()) {
+        return NanThrowTypeError("Invalid argument");
+    }
+
+    lxc_container *container = Unwrap(args.Holder());
+
+    String::Utf8Value key(args[0]);
+
+    char *ret = container->get_running_config_item(container, *key);
+
+    if (!ret) {
+        return NanThrowError("Unable to read configuration value");
+    }
+
+    Local<String> value = NanNew<String>(ret);
+    free(ret);
+
+    NanReturnValue(value);
+}
+
 NAN_METHOD(GetCgroupItem) {
     NanScope();
 
@@ -417,6 +440,7 @@ void Init(Handle<Object> exports) {
     NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "getConfigItem", GetConfigItem);
     NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "setConfigItem", SetConfigItem);
     NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "clearConfigItem", ClearConfigItem);
+    NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "getRunningConfigItem", GetRunningConfigItem);
 
     NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "getCgroupItem", GetCgroupItem);
     NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "setCgroupItem", SetCgroupItem);
