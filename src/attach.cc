@@ -35,9 +35,11 @@ AttachWorker::AttachWorker(lxc_container *container, NanCallback *callback,
     Local<Value> cwdValue = options->Get(NanNew("cwd"));
     Local<Value> fdValue = options->Get(NanNew("fds"));
 
-    if (!envValue->IsArray() || !cwdValue->IsString() || !fdValue->IsUint32()) {
-        NanThrowTypeError("Invalid argument");
-    }
+    // FIXME error checking in the constructor is a really, really bad idea, this segfaults
+    //if (!envValue->IsArray() || !cwdValue->IsString() || !fdValue->IsUint32()) {
+    //    NanThrowTypeError("Invalid argument");
+    //    return;
+    //}
 
     // command & args
     args.resize(arguments->Length() + 2, nullptr);
@@ -57,7 +59,7 @@ AttachWorker::AttachWorker(lxc_container *container, NanCallback *callback,
     }
 
     // cwd
-    cwd = *String::Utf8Value(options->Get(NanNew("cwd")));
+    cwd = *String::Utf8Value(cwdValue);
 
     // stdio
     term = options->Get(NanNew("term"))->BooleanValue();
@@ -131,7 +133,6 @@ void AttachWorker::LxcExecute() {
         SetErrorMessage("Container is not running");
         return;
     }
-
 
     lxc_attach_options_t options = LXC_ATTACH_OPTIONS_DEFAULT;
 

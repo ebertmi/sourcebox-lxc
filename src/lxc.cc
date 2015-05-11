@@ -94,7 +94,7 @@ NAN_METHOD(Resize) {
     NanScope();
 
     if (!args[0]->IsUint32() || !args[1]->IsUint32() || !args[1]->IsUint32()) {
-        NanThrowTypeError("Invalid argument");
+        return NanThrowTypeError("Invalid argument");
     }
 
     int fd = args[0]->Uint32Value();
@@ -106,7 +106,7 @@ NAN_METHOD(Resize) {
     ws.ws_ypixel = 0;
 
     if (ioctl(fd, TIOCSWINSZ, &ws) < 0) {
-        NanThrowError(strerror(errno));
+        return NanThrowError(strerror(errno));
     }
 
     NanReturnUndefined();
@@ -130,7 +130,7 @@ NAN_METHOD(Start) {
     NanScope();
 
     if (!args[0]->IsArray() || !args[1]->IsFunction()) {
-        NanThrowTypeError("Invalid argument");
+        return NanThrowTypeError("Invalid argument");
     }
 
     lxc_container *container = Unwrap(args.Holder());
@@ -147,7 +147,7 @@ NAN_METHOD(Stop) {
     NanScope();
 
     if (!args[0]->IsFunction()) {
-        NanThrowTypeError("Invalid argument");
+        return NanThrowTypeError("Invalid argument");
     }
 
     lxc_container *container = Unwrap(args.Holder());
@@ -163,7 +163,7 @@ NAN_METHOD(Destroy) {
     NanScope();
 
     if (!args[0]->IsFunction()) {
-        NanThrowTypeError("Invalid argument");
+        return NanThrowTypeError("Invalid argument");
     }
 
     lxc_container *container = Unwrap(args.Holder());
@@ -179,7 +179,7 @@ NAN_METHOD(Clone) {
     NanScope();
 
     if (!args[0]->IsString() || !args[1]->IsObject() || !args[2]->IsFunction()) {
-        NanThrowTypeError("Invalid argument");
+        return NanThrowTypeError("Invalid argument");
     }
 
     lxc_container *container = Unwrap(args.Holder());
@@ -198,7 +198,7 @@ NAN_METHOD(Attach) {
 
     if (!args[0]->IsString() || !args[1]->IsArray() ||
             !args[2]->IsObject() || !args[3]->IsFunction()) {
-        NanThrowTypeError("Invalid argument");
+        return NanThrowTypeError("Invalid argument");
     }
 
     lxc_container *container = Unwrap(args.Holder());
@@ -243,14 +243,14 @@ NAN_METHOD(GetKeys) {
     int len = container->get_keys(container, nullptr, nullptr, 0);
 
     if (len < 0) {
-        NanThrowError("Unable to read configuration keys");
+        return NanThrowError("Unable to read configuration keys");
     }
 
     char *buffer = new char[len + 1];
 
     if (container->get_keys(container, nullptr, buffer, len + 1) != len) {
         delete[] buffer;
-        NanThrowError("Unable to read configuration keys");
+        return NanThrowError("Unable to read configuration keys");
     }
 
     Local<String> keys = NanNew(buffer);
@@ -263,7 +263,7 @@ NAN_METHOD(GetConfigItem) {
     NanScope();
 
     if (!args[0]->IsString()) {
-        NanThrowTypeError("Invalid argument");
+        return NanThrowTypeError("Invalid argument");
     }
 
     lxc_container *container = Unwrap(args.Holder());
@@ -273,7 +273,7 @@ NAN_METHOD(GetConfigItem) {
     int len = container->get_config_item(container, *key, nullptr, 0);
 
     if (len < 0) {
-        NanThrowError("Invalid configuration key");
+        return NanThrowError("Invalid configuration key");
     }
 
     if (len == 0) {
@@ -284,7 +284,7 @@ NAN_METHOD(GetConfigItem) {
 
     if (container->get_config_item(container, *key, buffer, len + 1) != len) {
         delete[] buffer;
-        NanThrowError("Unable to read configuration value");
+        return NanThrowError("Unable to read configuration value");
     }
 
     Local<String> value = NanNew<String>(buffer);
@@ -297,7 +297,7 @@ NAN_METHOD(SetConfigItem) {
     NanScope();
 
     if (!args[0]->IsString() || !(args[1]->IsString() || args[1]->IsNumber())) {
-        NanThrowTypeError("Invalid argument");
+        return NanThrowTypeError("Invalid argument");
     }
 
     lxc_container *container = Unwrap(args.Holder());
@@ -314,7 +314,7 @@ NAN_METHOD(ClearConfigItem) {
     NanScope();
 
     if (!args[0]->IsString()) {
-        NanThrowTypeError("Invalid argument");
+        return NanThrowTypeError("Invalid argument");
     }
 
     lxc_container *container = Unwrap(args.Holder());
@@ -330,7 +330,7 @@ NAN_METHOD(GetCgroupItem) {
     NanScope();
 
     if (!args[0]->IsString()) {
-        NanThrowTypeError("Invalid argument");
+        return NanThrowTypeError("Invalid argument");
     }
 
     lxc_container *container = Unwrap(args.Holder());
@@ -340,14 +340,14 @@ NAN_METHOD(GetCgroupItem) {
     int len = container->get_cgroup_item(container, *key, nullptr, 0);
 
     if (len < 0) {
-        NanThrowError("Invalid cgroup key or container not running");
+        return NanThrowError("Invalid cgroup key or container not running");
     }
 
     char *buffer = new char[len + 1];
 
     if (container->get_cgroup_item(container, *key, buffer, len + 1) != len) {
         delete[] buffer;
-        NanThrowError("Unable to read cgroup value");
+        return NanThrowError("Unable to read cgroup value");
     }
 
     Local<String> value = NanNew(buffer);
@@ -360,7 +360,7 @@ NAN_METHOD(SetCgroupItem) {
     NanScope();
 
     if (!args[0]->IsString() || !(args[1]->IsString() || args[1]->IsNumber())) {
-        NanThrowTypeError("Invalid argument");
+        return NanThrowTypeError("Invalid argument");
     }
 
     lxc_container *container = Unwrap(args.Holder());
@@ -379,7 +379,7 @@ NAN_METHOD(GetContainer) {
     NanScope();
 
     if (!args[0]->IsString() && !args[1]->IsString()) {
-        NanThrowTypeError("Invalid argument");
+        return NanThrowTypeError("Invalid argument");
     }
 
     String::Utf8Value name(args[0]);
