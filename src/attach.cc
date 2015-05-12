@@ -31,16 +31,6 @@ AttachWorker::AttachWorker(lxc_container *container, NanCallback *callback,
         Local<Object> options) : LxcWorker(container, callback) {
     NanScope();
 
-    Local<Value> envValue = options->Get(NanNew("env"));
-    Local<Value> cwdValue = options->Get(NanNew("cwd"));
-    Local<Value> fdValue = options->Get(NanNew("fds"));
-
-    // FIXME error checking in the constructor is a really, really bad idea, this segfaults
-    //if (!envValue->IsArray() || !cwdValue->IsString() || !fdValue->IsUint32()) {
-    //    NanThrowTypeError("Invalid argument");
-    //    return;
-    //}
-
     // command & args
     args.resize(arguments->Length() + 2, nullptr);
     args.front() = strdup(*String::Utf8Value(command));
@@ -50,20 +40,32 @@ AttachWorker::AttachWorker(lxc_container *container, NanCallback *callback,
     }
 
     // env
-    Local<Array> envPairs = envValue.As<Array>();
+    Local<Value> envValue = options->Get(NanNew("env"));
 
-    env.resize(envPairs->Length() + 1, nullptr);
+    if (envValue->IsArray()) {
+        Local<Array> envPairs = envValue.As<Array>();
 
-    for (unsigned int i = 0; i < env.size() - 1; i++) {
-        env[i] = strdup(*String::Utf8Value(envPairs->Get(i)));
+        env.resize(envPairs->Length() + 1, nullptr);
+
+        for (unsigned int i = 0; i < env.size() - 1; i++) {
+            env[i] = strdup(*String::Utf8Value(envPairs->Get(i)));
+        }
     }
 
     // cwd
-    cwd = *String::Utf8Value(cwdValue);
+    Local<Value> cwdValue = options->Get(NanNew("cwd"));
+    if (cwdValue->IsString()) {
+        cwd = *String::Utf8Value(cwdValue);
+    }
 
     // stdio
     term = options->Get(NanNew("term"))->BooleanValue();
-    int fdCount = fdValue->Uint32Value() + 3;
+    int fdCount = 3;
+
+    Local<Value> fdValue = options->Get(NanNew("fds"));
+    if (fdValue->IsUint32()) {
+        fdCount += fdValue->Uint32Value();
+    }
 
     childFds.resize(fdCount);
     parentFds.resize(fdCount);

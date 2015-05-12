@@ -26,7 +26,7 @@ private:
     std::vector<char*> env;
     std::vector<int> childFds;
     std::vector<int> parentFds;
-    std::string cwd;
+    std::string cwd = "/";
     bool term;
 };
 
