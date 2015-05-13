@@ -22,6 +22,5 @@ StartWorker::~StartWorker() {
 void StartWorker::LxcExecute() {
     if (!container->start(container, lxcInit, args.data())) {
         SetErrorMessage("Failed to start container");
-        // TODO does this return false when the container is already running?
     }
 }
