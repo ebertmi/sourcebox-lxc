@@ -99,13 +99,13 @@ NAN_METHOD(Resize) {
 
     int fd = args[0]->Uint32Value();
 
-    winsize ws;
-    ws.ws_row = args[1]->Uint32Value();
-    ws.ws_col = args[2]->Uint32Value();
-    ws.ws_xpixel = 0;
-    ws.ws_ypixel = 0;
+    winsize size;
+    size.ws_row = args[1]->Uint32Value();
+    size.ws_col = args[2]->Uint32Value();
+    size.ws_xpixel = 0;
+    size.ws_ypixel = 0;
 
-    if (ioctl(fd, TIOCSWINSZ, &ws) < 0) {
+    if (ioctl(fd, TIOCSWINSZ, &size) < 0) {
         return NanThrowError(strerror(errno));
     }
 

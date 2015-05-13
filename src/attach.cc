@@ -59,7 +59,6 @@ AttachWorker::AttachWorker(lxc_container *container, NanCallback *callback,
     }
 
     // stdio
-    term = options->Get(NanNew("term"))->BooleanValue();
     int fdCount = 3;
 
     Local<Value> fdValue = options->Get(NanNew("fds"));
@@ -72,8 +71,22 @@ AttachWorker::AttachWorker(lxc_container *container, NanCallback *callback,
 
     int fdPos = 0; // TODO iterator?
 
+    Local<Value> termValue = options->Get(NanNew("term"));
+    term = termValue->BooleanValue();
+
     if (term) {
         int master, slave;
+
+        winsize size;
+        size.ws_xpixel = 0;
+        size.ws_ypixel = 0;
+
+        Local<Object> termOptions = termValue->ToObject();
+        Local<Value> rows = termOptions->Get(NanNew("rows"));
+        Local<Value> columns = termOptions->Get(NanNew("columns"));
+
+        size.ws_row = rows->IsUint32() ? rows->Uint32Value() : 24;
+        size.ws_col = columns->IsUint32() ? columns->Uint32Value() : 80;
 
 #ifdef UV_CLOEXEC_LOCK
         // Acquire read lock to prevent the file descriptor from leaking to
@@ -82,7 +95,7 @@ AttachWorker::AttachWorker(lxc_container *container, NanCallback *callback,
         uv_rwlock_rdlock(&loop->cloexec_lock);
 #endif
 
-        openpty(&master, &slave, nullptr, nullptr, nullptr);
+        openpty(&master, &slave, nullptr, nullptr, &size);
 
         SetFdFlags(master, FD_CLOEXEC);
         SetFdFlags(slave, FD_CLOEXEC);
