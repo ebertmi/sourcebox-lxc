@@ -61,9 +61,9 @@ AttachWorker::AttachWorker(lxc_container *container, NanCallback *callback,
     // stdio
     int fdCount = 3;
 
-    Local<Value> fdValue = options->Get(NanNew("fds"));
-    if (fdValue->IsUint32()) {
-        fdCount += fdValue->Uint32Value();
+    Local<Value> streams = options->Get(NanNew("streams"));
+    if (streams->IsUint32()) {
+        fdCount += streams->Uint32Value();
     }
 
     childFds.resize(fdCount);
