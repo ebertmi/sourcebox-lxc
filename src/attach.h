@@ -7,27 +7,32 @@
 
 class AttachWorker : public LxcWorker {
 public:
-    AttachWorker(lxc_container *container, NanCallback *callback,
-            v8::Local<v8::String> command, v8::Local<v8::Array> args,
-            v8::Local<v8::Object> options);
+    AttachWorker(lxc_container *container, v8::Local<v8::Object> attachedProcess,
+            const std::string& command, const std::vector<std::string>& args,
+            const std::string& cwd, const std::vector<std::string>& env,
+            const std::vector<int>& fds, bool term);
 
     ~AttachWorker();
-
-    const std::vector<int>& GetParentFds() const;
 
 private:
     void LxcExecute() override;
     void HandleOKCallback() override;
+    void HandleErrorCallback() override;
 
     static int AttachFunction(void *payload);
 
-    int pid;
-    std::vector<char*> args;
-    std::vector<char*> env;
-    std::vector<int> childFds;
-    std::vector<int> parentFds;
-    std::string cwd = "/";
-    bool term;
+    int pid_;
+
+    std::string cwd_;
+    std::vector<char*> args_;
+    std::vector<char*> env_;
+    std::vector<int> fds_;
+    bool term_;
 };
+
+void CreateFds(v8::Local<v8::Value> streams, v8::Local<v8::Value> term,
+        std::vector<int>& childFds, std::vector<int>& parentFds);
+
+void AttachInit(v8::Handle<v8::Object> exports);
 
 #endif

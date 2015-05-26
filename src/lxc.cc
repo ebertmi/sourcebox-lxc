@@ -1,8 +1,6 @@
 #include "lxc.h"
 
-#include <pty.h>
 #include <unistd.h>
-#include <sys/wait.h>
 
 #include <string>
 #include <vector>
@@ -18,11 +16,20 @@
 
 using namespace v8;
 
-Persistent<Function> containerConstructor;
-
+static Persistent<Function> containerConstructor;
 static const pid_t pid = getpid();
 
 // Helper, Cleanup etc.
+
+static std::vector<std::string> JsArrayToVector(const Local<Array> source) {
+    std::vector<std::string> dest(source->Length());
+
+    for (unsigned int i = 0; i < dest.size(); i++) {
+        dest[i] = *String::Utf8Value(source->Get(i));
+    }
+
+    return dest;
+}
 
 static void ExitHandler(int status, void *) {
     if (getpid() != pid) {
@@ -31,7 +38,7 @@ static void ExitHandler(int status, void *) {
     }
 }
 
-NAN_WEAK_CALLBACK(weakCallback) {
+NAN_WEAK_CALLBACK(WeakCallback) {
     lxc_container_put(data.GetParameter());
 }
 
@@ -41,7 +48,7 @@ Local<Object> Wrap(lxc_container *container) {
     Local<Object> wrap = NanNew(containerConstructor)->NewInstance();
     NanSetInternalFieldPointer(wrap, 0, container);
 
-    NanMakeWeakPersistent(wrap, container, &weakCallback);
+    NanMakeWeakPersistent(wrap, container, &WeakCallback);
 
     return NanEscapeScope(wrap);
 }
@@ -49,67 +56,6 @@ Local<Object> Wrap(lxc_container *container) {
 NAN_INLINE lxc_container *Unwrap(Local<Object> object) {
     void *ptr = NanGetInternalFieldPointer(object, 0);
     return static_cast<lxc_container*>(ptr);
-}
-
-// Javascript Functions
-
-NAN_METHOD(WaitPids) {
-    NanScope();
-
-    Local<Array> pids = args[0].As<Array>();
-    int length = pids->Length();
-
-    for (int i = 0; i < length; i++) {
-        int pid = pids->Get(i)->Int32Value();
-        int status;
-
-        int ret = waitpid(pid, &status, WNOHANG);
-
-        // FIXME handle waitpid errors
-
-        if (ret > 0) {
-            Local<Object> result = NanNew<Object>();
-            result->Set(NanNew("pid"), NanNew(ret));
-
-            if (WIFEXITED(status)) {
-                int exitCode = WEXITSTATUS(status);
-                result->Set(NanNew("exitCode"), NanNew(exitCode));
-            } else if (WIFSIGNALED(status)) {
-                const char *signalCode = node::signo_string(WTERMSIG(status));
-                result->Set(NanNew("signalCode"), NanNew(signalCode));
-            } else {
-                // child process got stopped or continued
-                // FIXME trace?
-                NanReturnNull();
-            }
-
-            NanReturnValue(result);
-        }
-    }
-
-    NanReturnNull();
-}
-
-NAN_METHOD(Resize) {
-    NanScope();
-
-    if (!args[0]->IsUint32() || !args[1]->IsUint32() || !args[1]->IsUint32()) {
-        return NanThrowTypeError("Invalid argument");
-    }
-
-    int fd = args[0]->Uint32Value();
-
-    winsize size;
-    size.ws_row = args[1]->Uint32Value();
-    size.ws_col = args[2]->Uint32Value();
-    size.ws_xpixel = 0;
-    size.ws_ypixel = 0;
-
-    if (ioctl(fd, TIOCSWINSZ, &size) < 0) {
-        return NanThrowError(strerror(errno));
-    }
-
-    NanReturnUndefined();
 }
 
 // Constructor
@@ -196,32 +142,70 @@ NAN_METHOD(Clone) {
 NAN_METHOD(Attach) {
     NanScope();
 
-    if (!args[0]->IsString() || !args[1]->IsArray() ||
-            !args[2]->IsObject() || !args[3]->IsFunction()) {
+    if (!args[0]->IsFunction() || !args[1]->IsString()
+            || !args[2]->IsArray() || !args[3]->IsObject()) {
         return NanThrowTypeError("Invalid argument");
     }
 
     lxc_container *container = Unwrap(args.Holder());
 
-    Local<String> command = args[0]->ToString();
-    Local<Array> arguments = args[1].As<Array>();
-    Local<Object> options = args[2]->ToObject();
+    // command
+    std::string command = *String::Utf8Value(args[1]);
 
-    NanCallback *callback = new NanCallback(args[3].As<Function>());
+    // args
+    std::vector<std::string> arguments = JsArrayToVector(args[2].As<Array>());
 
-    AttachWorker *attachWorker = new AttachWorker(container, callback,
-            command, arguments, options);
+    Local<Object> options = args[3]->ToObject();
 
-    auto& fds = attachWorker->GetParentFds();
-    Local<Array> fdArray = NanNew<Array>(fds.size());
+    // env
+    std::vector<std::string> env;
+    Local<Value> envValue = options->Get(NanNew("env"));
 
-    for (unsigned int i = 0; i < fds.size(); i++) {
-        fdArray->Set(i, NanNew<Integer>(fds[i]));
+    if (envValue->IsArray()) {
+        env = JsArrayToVector(envValue.As<Array>());
     }
 
+    // cwd
+    std::string cwd = "/";
+    Local<Value> cwdValue = options->Get(NanNew("cwd"));
+
+    if (cwdValue->IsString()) {
+        cwd = *String::Utf8Value(cwdValue);
+    }
+
+    // stdio
+    std::vector<int> childFds, parentFds;
+
+    Local<Value> streams = options->Get(NanNew("streams"));
+    Local<Value> term = options->Get(NanNew("term"));
+
+    CreateFds(streams, term, childFds, parentFds);
+
+    Local<Array> fdArray = NanNew<Array>(parentFds.size());
+
+    for (unsigned int i = 0; i < parentFds.size(); i++) {
+        fdArray->Set(i, NanNew<Uint32>(parentFds[i]));
+    }
+
+    // create AttachedProcess instance
+    Local<Function> AttachedProcess = args[0].As<Function>();
+    const int argc = 4;
+
+    Local<Value> argv[argc] = {
+        args[1],
+        fdArray,
+        NanNew(term->BooleanValue()),
+        args.Holder()->Get(NanNew("owner"))
+    };
+
+    Local<Object> attachedProcess = AttachedProcess->NewInstance(argc, argv);
+
+    // queue worker
+    AttachWorker* attachWorker = new AttachWorker(container, attachedProcess,
+            command, arguments, cwd, env, childFds, term->BooleanValue());
     NanAsyncQueueWorker(attachWorker);
 
-    NanReturnValue(fdArray);
+    NanReturnValue(attachedProcess);
 }
 
 // this is just a test, should probably be asynchronous
@@ -422,6 +406,8 @@ void Init(Handle<Object> exports) {
 
     on_exit(ExitHandler, nullptr);
 
+    AttachInit(exports);
+
     Local<FunctionTemplate>constructorTemplate = NanNew<FunctionTemplate>(LXCContainer);
 
     constructorTemplate->SetClassName(NanNew("LXCContainer"));
@@ -448,9 +434,9 @@ void Init(Handle<Object> exports) {
     NanAssignPersistent(containerConstructor, constructorTemplate->GetFunction());
 
     // Exports
-    exports->Set(NanNew("getContainer"), NanNew<FunctionTemplate>(GetContainer)->GetFunction());
-    exports->Set(NanNew("waitPids"), NanNew<FunctionTemplate>(WaitPids)->GetFunction());
-    exports->Set(NanNew("resize"), NanNew<FunctionTemplate>(Resize)->GetFunction());
+    exports->Set(NanNew("getContainer"),
+            NanNew<FunctionTemplate>(GetContainer)->GetFunction());
+
 }
 
 NODE_MODULE(lxc, Init)
