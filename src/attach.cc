@@ -49,6 +49,66 @@ static void MaybeUnref() {
     uv_unref(reinterpret_cast<uv_handle_t*>(&sigchldHandle));
 }
 
+static void ReapChildren(uv_signal_t* handle, int signal) {
+    NanScope();
+
+    Local<Object> processes = NanNew(attachedProcesses);
+    Local<Array> pids = processes->GetOwnPropertyNames();
+    int length = pids->Length();
+
+    bool reaped = false;
+
+    for (int i = 0; i < length; i++) {
+        int pid = pids->Get(i)->Uint32Value();
+        int status;
+        int ret;
+
+        do {
+            ret = waitpid(pid, &status, WNOHANG);
+        } while (ret == -1 && errno == EINTR);
+
+        if (ret == 0) {
+            continue;
+        }
+
+        if (ret == -1) {
+            if (errno != ECHILD) {
+                abort();
+            }
+            continue;
+        }
+
+        Local<Value> exitCode;
+        Local<Value> signalCode;
+
+        if (WIFEXITED(status)) {
+            exitCode = NanNew<Uint32>(WEXITSTATUS(status));
+            signalCode = NanNull();
+        } else if (WIFSIGNALED(status)) {
+            signalCode = NanNew(node::signo_string(WTERMSIG(status)));
+            exitCode = NanNull();
+        } else {
+            // child process got stopped or continued
+            continue;
+        }
+
+        const int argc = 3;
+        Local<Value> argv[argc] = {
+            processes->Get(pid),
+            exitCode,
+            signalCode
+        };
+
+        processes->Delete(pid);
+        exitCallback->Call(argc, argv);
+        reaped = true;
+    }
+
+    if (reaped) {
+        MaybeUnref();
+    }
+}
+
 AttachWorker::AttachWorker(lxc_container *container, Local<Object> attachedProcess,
         const std::string& command, const std::vector<std::string>& args,
         const std::string& cwd, const std::vector<std::string>& env,
@@ -108,6 +168,10 @@ void AttachWorker::LxcExecute() {
     options.stdout_fd = fds_[1];
     options.stderr_fd = fds_[2];
 
+    int errorFds[2];
+    socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, errorFds);
+    errorFd_ = errorFds[1];
+
 #ifdef UV_CLOEXEC_LOCK
     // Acquire write lock to prevent opening new FDs in other threads.
     uv_loop_t *loop = uv_default_loop();
@@ -120,9 +184,25 @@ void AttachWorker::LxcExecute() {
     uv_rwlock_wrunlock(&loop->cloexec_lock);
 #endif
 
+    close(errorFds[1]);
+
     if (ret == -1) {
         SetErrorMessage("Could not attach to container");
+    } else {
+        do {
+            ret = read(errorFds[0], &execErrno_, sizeof(execErrno_));
+        } while (ret == -1 && errno == EINTR);
+
+        if (ret != 0) {
+            // exec failed, reap child process
+
+            do {
+                waitpid(pid_, nullptr, 0);
+            } while (ret == -1 && errno == EINTR);
+        }
     }
+
+    close(errorFds[0]);
 }
 
 void AttachWorker::HandleOKCallback() {
@@ -133,22 +213,33 @@ void AttachWorker::HandleOKCallback() {
 
     attachedProcess->Set(NanNew("pid"), pid);
 
-    Local<Object> processes = NanNew(attachedProcesses);
-    processes->Set(pid_, attachedProcess);
+    if (execErrno_ == 0) {
+        Local<Object> processes = NanNew(attachedProcesses);
+        processes->Set(pid_, attachedProcess);
 
-    if (attachedProcess->Get(NanNew("_ref"))->BooleanValue()) {
-        uv_ref(reinterpret_cast<uv_handle_t*>(&sigchldHandle));
+        if (attachedProcess->Get(NanNew("_ref"))->BooleanValue()) {
+            uv_ref(reinterpret_cast<uv_handle_t*>(&sigchldHandle));
+        }
+
+        const int argc = 2;
+        Local<Value> argv[argc] = {
+            NanNew("attach"),
+            pid
+        };
+
+        Local<Function> emit = attachedProcess->Get(NanNew("emit")).As<Function>();
+        NanMakeCallback(attachedProcess, emit, argc, argv);
+    } else {
+        // Attaching was successful but exec failed
+
+        const int argc = 2;
+        Local<Value> argv[argc] = {
+            attachedProcess,
+            NanNew<Int32>(-execErrno_)
+        };
+
+        exitCallback->Call(argc, argv);
     }
-
-    const int argc = 2;
-
-    Local<Value> argv[argc] = {
-        NanNew("attach"),
-        pid
-    };
-
-    Local<Function> emit = attachedProcess->Get(NanNew("emit")).As<Function>();
-    NanMakeCallback(attachedProcess, emit, argc, argv);
 }
 
 void AttachWorker::HandleErrorCallback() {
@@ -157,7 +248,6 @@ void AttachWorker::HandleErrorCallback() {
     Local<Object> attachedProcess = GetFromPersistent("attachedProcess");
 
     const int argc = 2;
-
     Local<Value> argv[argc] = {
         NanNew("error"),
         NanError(ErrorMessage())
@@ -167,7 +257,7 @@ void AttachWorker::HandleErrorCallback() {
     NanMakeCallback(attachedProcess, emit, argc, argv);
 }
 
-// gets called within the container
+// This method gets called within the container
 int AttachWorker::AttachFunction(void *payload) {
     AttachWorker *worker = static_cast<AttachWorker*>(payload);
 
@@ -188,14 +278,21 @@ int AttachWorker::AttachFunction(void *payload) {
 
     execvp(args.front(), args.data());
 
-    // if exec fails, print the error to stderr and exit with code 128 (see GNU
-    // conventions)
-    perror(args.front());
+    // at this point execvp has failed
 
-    return 128;
+    int execErrno = errno;
+    ssize_t ret;
+
+    do {
+        // write the exec errno back to the parent
+        ret = write(worker->errorFd_, &execErrno, sizeof(execErrno));
+    } while (ret == -1 && errno == EINTR);
+
+    return 127;
 }
 
-void CreateFds(Local<Value> streams, Local<Value> term, std::vector<int>& childFds, std::vector<int>& parentFds) {
+void CreateFds(Local<Value> streams, Local<Value> term,
+        std::vector<int>& childFds, std::vector<int>& parentFds) {
     int count = 3;
     int pos = 0; // TODO iterator?
 
@@ -250,67 +347,6 @@ void CreateFds(Local<Value> streams, Local<Value> term, std::vector<int>& childF
         SetFlFlags(fds[0], O_NONBLOCK);
         parentFds[pos] = fds[0];
         childFds[pos] = fds[1];
-    }
-}
-
-static void ReapChildren(uv_signal_t* handle, int signal) {
-    NanScope();
-
-    Local<Object> processes = NanNew(attachedProcesses);
-    Local<Array> pids = processes->GetOwnPropertyNames();
-    int length = pids->Length();
-
-    bool reaped = false;
-
-    for (int i = 0; i < length; i++) {
-        int pid = pids->Get(i)->Uint32Value();
-        int status;
-        int ret;
-
-        do {
-            ret = waitpid(pid, &status, WNOHANG);
-        } while (ret == -1 && errno == EINTR);
-
-        if (ret == 0) {
-            continue;
-        }
-
-        if (ret == -1) {
-            if (errno != ECHILD) {
-                abort();
-            }
-            continue;
-        }
-
-        Local<Value> exitCode;
-        Local<Value> signalCode;
-
-        if (WIFEXITED(status)) {
-            exitCode = NanNew<Uint32>(WEXITSTATUS(status));
-            signalCode = NanNull();
-        } else if (WIFSIGNALED(status)) {
-            signalCode = NanNew(node::signo_string(WTERMSIG(status)));
-            exitCode = NanNull();
-        } else {
-            // child process got stopped or continued
-            continue;
-        }
-
-        const int argc = 3;
-
-        Local<Value> argv[argc] = {
-            processes->Get(pid),
-            exitCode,
-            signalCode
-        };
-
-        processes->Delete(pid);
-        exitCallback->Call(argc, argv);
-        reaped = true;
-    }
-
-    if (reaped) {
-        MaybeUnref();
     }
 }
 
@@ -382,14 +418,17 @@ NAN_METHOD(SetExitCallback) {
     NanReturnUndefined();
 }
 
+// Initialization
+
 void AttachInit(Handle<Object> exports) {
     NanScope();
+
+    NanAssignPersistent(attachedProcesses, NanNew<Object>());
 
     // SIGCHLD handling
     uv_signal_init(uv_default_loop(), &sigchldHandle);
     uv_signal_start(&sigchldHandle, ReapChildren, SIGCHLD);
     uv_unref(reinterpret_cast<uv_handle_t*>(&sigchldHandle));
-    NanAssignPersistent(attachedProcesses, NanNew<Object>());
 
     // Exports
     exports->Set(NanNew("ref"), NanNew<FunctionTemplate>(Ref)->GetFunction());

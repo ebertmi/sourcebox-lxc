@@ -24,7 +24,6 @@ void GetWorker::HandleOKCallback() {
     Local<Object> wrap = Wrap(container);
 
     const int argc = 2;
-
     Local<Value> argv[argc] = {
         NanNull(),
         wrap

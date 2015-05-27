@@ -22,12 +22,14 @@ private:
     static int AttachFunction(void *payload);
 
     int pid_;
+    int execErrno_ = 0;
 
     std::string cwd_;
     std::vector<char*> args_;
     std::vector<char*> env_;
     std::vector<int> fds_;
     bool term_;
+    int errorFd_;
 };
 
 void CreateFds(v8::Local<v8::Value> streams, v8::Local<v8::Value> term,

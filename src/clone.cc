@@ -60,7 +60,6 @@ void CloneWorker::HandleOKCallback() {
     Local<Object> wrap = Wrap(clone);
 
     const int argc = 2;
-
     Local<Value> argv[argc] = {
         NanNull(),
         wrap

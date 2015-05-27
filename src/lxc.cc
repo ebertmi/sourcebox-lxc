@@ -189,8 +189,8 @@ NAN_METHOD(Attach) {
 
     // create AttachedProcess instance
     Local<Function> AttachedProcess = args[0].As<Function>();
-    const int argc = 4;
 
+    const int argc = 4;
     Local<Value> argv[argc] = {
         args[1],
         fdArray,
