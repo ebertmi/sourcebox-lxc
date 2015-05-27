@@ -7,49 +7,49 @@ CloneWorker::CloneWorker(lxc_container *container, NanCallback *callback,
         Local<String> name, Local<Object> options) : LxcWorker(container, callback) {
     NanScope();
 
-    this->name = *String::Utf8Value(name);
+    name_ = *String::Utf8Value(name);
 
-    Local<Value> pathValue = options->Get(NanNew("path"));
-    if (pathValue->IsString()) {
-        this->path = *String::Utf8Value(pathValue);
+    Local<Value> path = options->Get(NanNew("path"));
+    if (path->IsString()) {
+        path_ = *String::Utf8Value(path);
     }
 
-    Local<Value> bdevtypeValue = options->Get(NanNew("backingstore"));
-    if (bdevtypeValue->IsString()) {
-        bdevtype = *String::Utf8Value(bdevtypeValue);
+    Local<Value> bdevtype= options->Get(NanNew("backingstore"));
+    if (bdevtype->IsString()) {
+        bdevtype_ = *String::Utf8Value(bdevtype);
     }
 
-    Local<Value> sizeValue = options->Get(NanNew("size"));
-    if (sizeValue->IsNumber()) {
-        size = sizeValue->Uint32Value();
+    Local<Value> size = options->Get(NanNew("size"));
+    if (size->IsNumber()) {
+        size_ = size->Uint32Value();
     }
 
     if (options->Get(NanNew("snapshot"))->IsTrue()) {
-        flags |= LXC_CLONE_SNAPSHOT;
+        flags_ |= LXC_CLONE_SNAPSHOT;
     }
 
     if (options->Get(NanNew("keepname"))->IsTrue()) {
-        flags |= LXC_CLONE_KEEPNAME;
+        flags_ |= LXC_CLONE_KEEPNAME;
     }
 
     if (options->Get(NanNew("keepmac"))->IsTrue()) {
-        flags |= LXC_CLONE_KEEPMACADDR;
+        flags_ |= LXC_CLONE_KEEPMACADDR;
     }
 }
 
 void CloneWorker::LxcExecute() {
-    if (container->is_running(container)) {
+    if (container_->is_running(container_)) {
         SetErrorMessage("Container is running");
         return;
     }
 
-    clone = container->clone(container, name.c_str(),
-            path.empty() ? nullptr : path.c_str(),
-            flags,
-            bdevtype.empty() ? nullptr : bdevtype.c_str(),
-            nullptr, size, nullptr);
+    clone_ = container_->clone(container_, name_.c_str(),
+            path_.empty() ? nullptr : path_.c_str(),
+            flags_,
+            bdevtype_.empty() ? nullptr : bdevtype_.c_str(),
+            nullptr, size_, nullptr);
 
-    if (!clone) {
+    if (!clone_) {
         SetErrorMessage("Failed to clone container");
     }
 }
@@ -57,7 +57,7 @@ void CloneWorker::LxcExecute() {
 void CloneWorker::HandleOKCallback() {
     NanScope();
 
-    Local<Object> wrap = Wrap(clone);
+    Local<Object> wrap = Wrap(clone_);
 
     const int argc = 2;
     Local<Value> argv[argc] = {

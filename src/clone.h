@@ -12,13 +12,13 @@ private:
     void LxcExecute() override;
     void HandleOKCallback() override;
 
-    lxc_container *clone;
+    lxc_container *clone_;
 
-    std::string name;
-    std::string path;
-    std::string bdevtype;
-    uint64_t size = 0;
-    int flags = 0;
+    std::string name_;
+    std::string path_;
+    std::string bdevtype_;
+    uint64_t size_ = 0;
+    int flags_ = 0;
 };
 
 #endif

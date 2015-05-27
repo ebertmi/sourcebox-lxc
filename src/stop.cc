@@ -3,7 +3,7 @@
 using namespace v8;
 
 void StopWorker::LxcExecute() {
-    if (!container->stop(container)) {
+    if (!container_->stop(container_)) {
         SetErrorMessage("Failed to stop container");
     }
 }

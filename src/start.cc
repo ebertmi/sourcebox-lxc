@@ -6,21 +6,21 @@ StartWorker::StartWorker(lxc_container *container, NanCallback *callback,
         Local<Array> arguments) : LxcWorker(container, callback) {
     NanScope();
 
-    args.resize(arguments->Length() + 1, nullptr);
+    args_.resize(arguments->Length() + 1, nullptr);
 
-    for (unsigned int i = 0; i < args.size() - 1; i++) {
-        args[i] = strdup(*String::Utf8Value(arguments->Get(i)));
+    for (unsigned int i = 0; i < args_.size() - 1; i++) {
+        args_[i] = strdup(*String::Utf8Value(arguments->Get(i)));
     }
 }
 
 StartWorker::~StartWorker() {
-    for (char *p: args) {
+    for (char *p: args_) {
         free(p);
     }
 }
 
 void StartWorker::LxcExecute() {
-    if (!container->start(container, lxcInit, args.data())) {
+    if (!container_->start(container_, lxcInit_, args_.data())) {
         SetErrorMessage("Failed to start container");
     }
 }

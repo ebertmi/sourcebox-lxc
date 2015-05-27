@@ -10,7 +10,7 @@ public:
     AsyncWorker(lxc_container *container, NanCallback *callback);
 
 protected:
-    lxc_container *container;
+    lxc_container *container_;
 };
 
 /**

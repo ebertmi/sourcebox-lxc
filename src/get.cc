@@ -5,23 +5,23 @@
 using namespace v8;
 
 GetWorker::GetWorker(NanCallback *callback, const std::string& name, const std::string& path, bool errorIfUndefined)
-    : AsyncWorker(nullptr, callback), name(name), path(path), errorIfUndefined(errorIfUndefined) { }
+    : AsyncWorker(nullptr, callback), name_(name), path_(path), errorIfUndefined_(errorIfUndefined) { }
 
 void GetWorker::Execute() {
-    container = lxc_container_new(name.c_str(), path.c_str());
+    container_ = lxc_container_new(name_.c_str(), path_.c_str());
 
-    if (!container) {
+    if (!container_) {
         SetErrorMessage("Failed to create container");
-    } else if (errorIfUndefined && !container->is_defined(container)) {
+    } else if (errorIfUndefined_ && !container_->is_defined(container_)) {
         SetErrorMessage("Container not found");
-        lxc_container_put(container);
+        lxc_container_put(container_);
     }
 }
 
 void GetWorker::HandleOKCallback() {
     NanScope();
 
-    Local<Object> wrap = Wrap(container);
+    Local<Object> wrap = Wrap(container_);
 
     const int argc = 2;
     Local<Value> argv[argc] = {

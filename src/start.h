@@ -15,8 +15,8 @@ public:
 private:
     void LxcExecute() override;
 
-    std::vector<char*> args;
-    bool lxcInit = false; // TODO start just freezes when this is true
+    std::vector<char*> args_;
+    bool lxcInit_ = false; // TODO start just freezes when this is true
 };
 
 #endif

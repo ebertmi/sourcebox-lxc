@@ -152,7 +152,7 @@ AttachWorker::~AttachWorker() {
 }
 
 void AttachWorker::LxcExecute() {
-    if (!container->is_running(container)) {
+    if (!container_->is_running(container_)) {
         SetErrorMessage("Container is not running");
         return;
     }
@@ -178,7 +178,7 @@ void AttachWorker::LxcExecute() {
     uv_rwlock_wrlock(&loop->cloexec_lock);
 #endif
 
-    int ret = container->attach(container, AttachFunction, this, &options, &pid_);
+    int ret = container_->attach(container_, AttachFunction, this, &options, &pid_);
 
 #ifdef UV_CLOEXEC_LOCK
     uv_rwlock_wrunlock(&loop->cloexec_lock);

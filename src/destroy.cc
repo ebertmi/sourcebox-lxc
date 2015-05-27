@@ -3,9 +3,9 @@
 using namespace v8;
 
 void DestroyWorker::LxcExecute() {
-    if (container->is_running(container)) {
+    if (container_->is_running(container_)) {
         SetErrorMessage("Container is running");
-    } else if (!container->destroy(container)) {
+    } else if (!container_->destroy(container_)) {
         SetErrorMessage("Failed to destroy container");
     }
 }

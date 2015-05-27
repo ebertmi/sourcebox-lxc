@@ -12,9 +12,9 @@ private:
     void Execute() override;
     void HandleOKCallback() override;
 
-    std::string name;
-    std::string path;
-    bool errorIfUndefined;
+    std::string name_;
+    std::string path_;
+    bool errorIfUndefined_;
 };
 
 #endif
