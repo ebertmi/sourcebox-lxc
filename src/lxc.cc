@@ -385,7 +385,7 @@ NAN_METHOD(SetCgroupItem) {
 NAN_METHOD(GetContainer) {
     NanScope();
 
-    if (!args[0]->IsString() && !args[1]->IsString()) {
+    if (!args[0]->IsString() && !args[1]->IsString() && !args[2]->IsFunction()) {
         return NanThrowTypeError("Invalid argument");
     }
 

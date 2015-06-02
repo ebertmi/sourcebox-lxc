@@ -8,7 +8,8 @@ GetWorker::GetWorker(NanCallback *callback, const std::string& name, const std::
     : AsyncWorker(nullptr, callback), name_(name), path_(path), errorIfUndefined_(errorIfUndefined) { }
 
 void GetWorker::Execute() {
-    container_ = lxc_container_new(name_.c_str(), path_.c_str());
+    container_ = lxc_container_new(name_.c_str(),
+            path_.empty() ? nullptr : path_.c_str());
 
     if (!container_) {
         SetErrorMessage("Failed to create container");
