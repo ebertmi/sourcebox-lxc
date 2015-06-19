@@ -112,8 +112,9 @@ static void ReapChildren(uv_signal_t* handle, int signal) {
 AttachWorker::AttachWorker(lxc_container *container, Local<Object> attachedProcess,
         const std::string& command, const std::vector<std::string>& args,
         const std::string& cwd, const std::vector<std::string>& env,
-        const std::vector<int>& fds, bool term)
-        : LxcWorker(container, nullptr), cwd_(cwd), fds_(fds), term_(term) {
+        const std::vector<int>& fds, bool term, int uid, int gid)
+        : LxcWorker(container, nullptr), cwd_(cwd), fds_(fds),
+        term_(term), uid_(uid), gid_(gid) {
     SaveToPersistent("attachedProcess", attachedProcess);
 
     // command & args
@@ -163,6 +164,9 @@ void AttachWorker::LxcExecute() {
 
     options.env_policy = LXC_ATTACH_CLEAR_ENV;
     options.extra_env_vars = env_.data();
+
+    options.uid = uid_;
+    options.gid = gid_;
 
     options.stdin_fd = fds_[0];
     options.stdout_fd = fds_[1];

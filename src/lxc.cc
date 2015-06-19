@@ -173,6 +173,21 @@ NAN_METHOD(Attach) {
         cwd = *String::Utf8Value(cwdValue);
     }
 
+    // uid & gid
+    int uid = -1;
+    Local<Value> uidValue = options->Get(NanNew("uid"));
+
+    if (uidValue->IsUint32()) {
+        uid = uidValue->Uint32Value();
+    }
+
+    int gid = -1;
+    Local<Value> gidValue = options->Get(NanNew("gid"));
+
+    if (gidValue->IsUint32()) {
+        gid = gidValue->Uint32Value();
+    }
+
     // stdio
     std::vector<int> childFds, parentFds;
 
@@ -202,7 +217,8 @@ NAN_METHOD(Attach) {
 
     // queue worker
     AttachWorker* attachWorker = new AttachWorker(container, attachedProcess,
-            command, arguments, cwd, env, childFds, term->BooleanValue());
+            command, arguments, cwd, env, childFds, term->BooleanValue(),
+            uid, gid);
     NanAsyncQueueWorker(attachWorker);
 
     NanReturnValue(attachedProcess);
