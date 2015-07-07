@@ -6,7 +6,7 @@
 #include <utmp.h>
 
 #if NAUV_UVVERSION >= 0x000b14
-#define UV_CLOEXEC_LOCK
+#define HAVE_UV_CLOEXEC_LOCK
 #endif
 
 using namespace v8;
@@ -112,9 +112,10 @@ static void ReapChildren(uv_signal_t* handle, int signal) {
 AttachWorker::AttachWorker(lxc_container *container, Local<Object> attachedProcess,
         const std::string& command, const std::vector<std::string>& args,
         const std::string& cwd, const std::vector<std::string>& env,
-        const std::vector<int>& fds, bool term, int uid, int gid)
-        : LxcWorker(container, nullptr), cwd_(cwd), fds_(fds),
-        term_(term), uid_(uid), gid_(gid) {
+        const std::vector<int>& fds, bool term, int namespaces,
+        bool cgroup, int uid, int gid)
+        : LxcWorker(container, nullptr), cwd_(cwd), fds_(fds), term_(term),
+        cgroup_(cgroup), namespaces_(namespaces), uid_(uid), gid_(gid) {
     SaveToPersistent("attachedProcess", attachedProcess);
 
     // command & args
@@ -172,11 +173,17 @@ void AttachWorker::LxcExecute() {
     options.stdout_fd = fds_[1];
     options.stderr_fd = fds_[2];
 
+    if (!cgroup_) {
+        options.attach_flags &= ~LXC_ATTACH_MOVE_TO_CGROUP;
+    }
+
+    options.namespaces = namespaces_;
+
     int errorFds[2];
     socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, errorFds);
     errorFd_ = errorFds[1];
 
-#ifdef UV_CLOEXEC_LOCK
+#ifdef HAVE_UV_CLOEXEC_LOCK
     // Acquire write lock to prevent opening new FDs in other threads.
     uv_loop_t *loop = uv_default_loop();
     uv_rwlock_wrlock(&loop->cloexec_lock);
@@ -184,7 +191,7 @@ void AttachWorker::LxcExecute() {
 
     int ret = container_->attach(container_, AttachFunction, this, &options, &pid_);
 
-#ifdef UV_CLOEXEC_LOCK
+#ifdef HAVE_UV_CLOEXEC_LOCK
     uv_rwlock_wrunlock(&loop->cloexec_lock);
 #endif
 
@@ -321,7 +328,7 @@ void CreateFds(Local<Value> streams, Local<Value> term,
         size.ws_row = rows->IsUint32() ? rows->Uint32Value() : 24;
         size.ws_col = columns->IsUint32() ? columns->Uint32Value() : 80;
 
-#ifdef UV_CLOEXEC_LOCK
+#ifdef HAVE_UV_CLOEXEC_LOCK
         // Acquire read lock to prevent the file descriptor from leaking to
         // other processes before the FD_CLOEXEC flag is set.
         uv_loop_t *loop = uv_default_loop();
@@ -333,19 +340,19 @@ void CreateFds(Local<Value> streams, Local<Value> term,
         SetFdFlags(master, FD_CLOEXEC);
         SetFdFlags(slave, FD_CLOEXEC);
 
-#ifdef UV_CLOEXEC_LOCK
+#ifdef HAVE_UV_CLOEXEC_LOCK
         uv_rwlock_rdunlock(&loop->cloexec_lock);
 #endif
 
         SetFlFlags(master, O_NONBLOCK);
 
-        for (/* reusing fdPos */; pos < 3; pos++) {
+        for (/* reusing pos */; pos < 3; pos++) {
             parentFds[pos] = master;
             childFds[pos] = slave;
         }
     }
 
-    for (/* reusing fdPos */; pos < count; pos++) {
+    for (/* reusing pos */; pos < count; pos++) {
         int fds[2];
         socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, fds);
         SetFlFlags(fds[0], O_NONBLOCK);

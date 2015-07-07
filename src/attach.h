@@ -10,7 +10,8 @@ public:
     AttachWorker(lxc_container *container, v8::Local<v8::Object> attachedProcess,
             const std::string& command, const std::vector<std::string>& args,
             const std::string& cwd, const std::vector<std::string>& env,
-            const std::vector<int>& fds, bool term, int uid, int gid);
+            const std::vector<int>& fds, bool term,
+            int namespaces, bool cgroup, int uid, int gid);
 
     ~AttachWorker();
 
@@ -29,6 +30,8 @@ private:
     std::vector<char*> env_;
     std::vector<int> fds_;
     bool term_;
+    bool cgroup_;
+    int namespaces_;
     int uid_;
     int gid_;
     int errorFd_;

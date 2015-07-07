@@ -1,9 +1,11 @@
 #include "lxc.h"
 
 #include <unistd.h>
+#include <sched.h>
 
 #include <string>
 #include <vector>
+#include <map>
 
 #include <nan.h>
 
@@ -18,6 +20,16 @@ using namespace v8;
 
 static Persistent<Function> containerConstructor;
 static const pid_t pid = getpid();
+
+static const std::map<std::string, int> nsMap = {
+    {"ns", CLONE_NEWNS},
+    {"mount", CLONE_NEWNS},
+    {"uts", CLONE_NEWUTS},
+    {"ipc", CLONE_NEWIPC},
+    {"user", CLONE_NEWUSER},
+    {"pid", CLONE_NEWPID},
+    {"net", CLONE_NEWNET},
+};
 
 // Helper, Cleanup etc.
 
@@ -188,6 +200,34 @@ NAN_METHOD(Attach) {
         gid = gidValue->Uint32Value();
     }
 
+    // cgroup
+    bool cgroup = true;
+    Local<Value> cgroupValue = options->Get(NanNew("cgroup"));
+
+    if (cgroupValue->IsBoolean()) {
+        cgroup = cgroupValue->BooleanValue();
+    }
+
+    // namespaces
+    int namespaces = -1;
+    Local<Value> nsValue = options->Get(NanNew("namespaces"));
+
+    if (nsValue->IsArray()) {
+        Local<Array> nsArray = nsValue.As<Array>();
+        int length = nsArray->Length();
+        namespaces = 0;
+
+        for (int i = 0; i < length; i++) {
+            std::string ns = *String::Utf8Value(nsArray->Get(i));
+            auto it = nsMap.find(ns);
+            if (it != nsMap.end()) {
+                namespaces |= it->second;
+            } else {
+                return NanThrowTypeError(("invalid namespace: " + ns).c_str());
+            }
+        }
+    }
+
     // stdio
     std::vector<int> childFds, parentFds;
 
@@ -218,7 +258,7 @@ NAN_METHOD(Attach) {
     // queue worker
     AttachWorker* attachWorker = new AttachWorker(container, attachedProcess,
             command, arguments, cwd, env, childFds, term->BooleanValue(),
-            uid, gid);
+            namespaces, cgroup, uid, gid);
     NanAsyncQueueWorker(attachWorker);
 
     NanReturnValue(attachedProcess);
