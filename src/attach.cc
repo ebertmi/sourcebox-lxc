@@ -56,7 +56,7 @@ static void ReapChildren(uv_signal_t* handle, int signal) {
     Local<Array> pids = processes->GetOwnPropertyNames();
     int length = pids->Length();
 
-    bool reaped = false;
+    std::vector<std::pair<int,int>> reaped;
 
     for (int i = 0; i < length; i++) {
         int pid = pids->Get(i)->Uint32Value();
@@ -77,6 +77,13 @@ static void ReapChildren(uv_signal_t* handle, int signal) {
             }
             continue;
         }
+
+        reaped.push_back(std::make_pair(pid, status));
+    }
+
+    for (auto pair : reaped) {
+        int pid = pair.first;
+        int status = pair.second;
 
         Local<Value> exitCode;
         Local<Value> signalCode;
@@ -101,10 +108,9 @@ static void ReapChildren(uv_signal_t* handle, int signal) {
 
         processes->Delete(pid);
         exitCallback->Call(argc, argv);
-        reaped = true;
     }
 
-    if (reaped) {
+    if (!reaped.empty()) {
         MaybeUnref();
     }
 }
