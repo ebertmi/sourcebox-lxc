@@ -1,6 +1,7 @@
 #include "attach.h"
 
 #include <sys/wait.h>
+#include <sys/capability.h>
 #include <unistd.h>
 #include <pty.h>
 #include <utmp.h>
@@ -116,24 +117,16 @@ static void ReapChildren(uv_signal_t* handle, int signal) {
 }
 
 AttachWorker::AttachWorker(lxc_container *container, Local<Object> attachedProcess,
-        const std::string& command, const std::vector<std::string>& args,
-        const std::string& cwd, const std::vector<std::string>& env,
+        AttachCommand *command, const std::string& cwd,
+        const std::vector<std::string>& env,
         const std::vector<int>& fds, bool term, int namespaces,
         bool cgroup, int uid, int gid)
-        : LxcWorker(container, nullptr), cwd_(cwd), fds_(fds), term_(term),
-        cgroup_(cgroup), namespaces_(namespaces), uid_(uid), gid_(gid) {
+        : LxcWorker(container, nullptr), command_(command), cwd_(cwd),
+        fds_(fds), term_(term), cgroup_(cgroup),
+        namespaces_(namespaces), uid_(uid), gid_(gid) {
+
     SaveToPersistent("attachedProcess", attachedProcess);
 
-    // command & args
-    args_.resize(args.size() + 2);
-    args_.front() = strdup(command.c_str());
-    args_.back() = nullptr;
-
-    for (unsigned int i = 0; i < args_.size() - 2; i++) {
-        args_[i + 1] = strdup(args[i].c_str());
-    }
-
-    // env
     env_.resize(env.size() + 1);
     env_.back() = nullptr;
 
@@ -143,11 +136,6 @@ AttachWorker::AttachWorker(lxc_container *container, Local<Object> attachedProce
 }
 
 AttachWorker::~AttachWorker() {
-    // command & args
-    for (char *p: args_) {
-        free(p);
-    }
-
     // env
     for (char *p: env_) {
         free(p);
@@ -157,6 +145,9 @@ AttachWorker::~AttachWorker() {
     for (int fd: fds_) {
         close(fd);
     }
+
+    // command
+    delete command_;
 }
 
 void AttachWorker::LxcExecute() {
@@ -180,7 +171,7 @@ void AttachWorker::LxcExecute() {
     options.stderr_fd = fds_[2];
 
     if (!cgroup_) {
-        options.attach_flags &= ~LXC_ATTACH_MOVE_TO_CGROUP;
+        options.attach_flags &= ~LXC_ATTACH_MOVE_TO_CGROUP; //FIXME i think thats wrong
     }
 
     options.namespaces = namespaces_;
@@ -279,7 +270,6 @@ int AttachWorker::AttachFunction(void *payload) {
     AttachWorker *worker = static_cast<AttachWorker*>(payload);
 
     auto& fds = worker->fds_;
-    auto& args = worker->args_;
 
     if (worker->term_) {
         login_tty(0);
@@ -293,19 +283,76 @@ int AttachWorker::AttachFunction(void *payload) {
         }
     }
 
-    execvp(args.front(), args.data());
+    return worker->command_->Attach(worker->errorFd_);
+}
+
+int AttachCommand::Attach(int errorFd) {
+    close(errorFd);
+    return Attach();
+}
+
+int AttachCommand::Attach() {
+    return 0;
+}
+
+ExecCommand::ExecCommand(const std::string& command,
+        const std::vector<std::string>& args) {
+    args_.resize(args.size() + 2);
+    args_.front() = strdup(command.c_str());
+    args_.back() = nullptr;
+
+    for (unsigned int i = 0; i < args_.size() - 2; i++) {
+        args_[i + 1] = strdup(args[i].c_str());
+    }
+}
+
+ExecCommand::~ExecCommand() {
+    for (char *p: args_) {
+        free(p);
+    }
+}
+
+int ExecCommand::Attach(int errorFd) {
+    execvp(args_.front(), args_.data());
 
     // at this point execvp has failed
-
     int execErrno = errno;
     ssize_t ret;
 
     do {
         // write the exec errno back to the parent
-        ret = write(worker->errorFd_, &execErrno, sizeof(execErrno));
+        ret = write(errorFd, &execErrno, sizeof(execErrno));
     } while (ret == -1 && errno == EINTR);
 
+    close(errorFd);
+
     return 127;
+}
+
+int OpenCommand::Attach() {
+    if (geteuid() != 0) {
+        // drop all capabilites
+        cap_t caps = cap_get_proc();
+        cap_clear(caps);
+        cap_set_proc(caps);
+        cap_free(caps);
+    }
+
+    int fd = open(path_.c_str(), flags_, mode_);
+
+    if (fd < 0) {
+        fprintf(stderr, "%d", errno);
+        fflush(stderr);
+        return 1;
+    }
+
+    printf("%d", fd);
+    fflush(stdout);
+    fclose(stdout);
+
+    // wait until node opens the fd and kills this process
+    pause();
+    return 0;
 }
 
 void CreateFds(Local<Value> streams, Local<Value> term,

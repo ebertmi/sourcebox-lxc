@@ -13,7 +13,8 @@
     ],
     "libraries": [
       "-lutil",
-      "-llxc"
+      "-llxc",
+      "-lcap"
     ],
     "cflags": [
       "-std=c++11",

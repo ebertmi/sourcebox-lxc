@@ -257,8 +257,58 @@ NAN_METHOD(Attach) {
 
     // queue worker
     AttachWorker* attachWorker = new AttachWorker(container, attachedProcess,
-            command, arguments, cwd, env, childFds, term->BooleanValue(),
+            new ExecCommand(command, arguments), cwd, env, childFds, term->BooleanValue(),
             namespaces, cgroup, uid, gid);
+    NanAsyncQueueWorker(attachWorker);
+
+    NanReturnValue(attachedProcess);
+}
+
+NAN_METHOD(Open) {
+    NanScope();
+
+    if (!args[0]->IsFunction() || !args[1]->IsString() || !args[2]->IsUint32() ||
+            !args[3]->IsUint32() || !args[4]->IsUint32() || !args[5]->IsUint32()) {
+        return NanThrowTypeError("Invalid argument");
+    }
+
+    lxc_container *container = Unwrap(args.Holder());
+
+    std::string path = *String::Utf8Value(args[1]);
+    int flags = args[2]->Uint32Value();
+    int mode = args[3]->Uint32Value();
+    int uid = args[4]->Uint32Value();
+    int gid = args[5]->Uint32Value();
+
+    OpenCommand *openCommand = new OpenCommand(path, flags, mode);
+
+    // stdio
+    std::vector<int> childFds, parentFds;
+    CreateFds(NanNew(0), NanNew(false), childFds, parentFds);
+
+    Local<Array> fdArray = NanNew<Array>(parentFds.size());
+
+    for (unsigned int i = 0; i < parentFds.size(); i++) {
+        fdArray->Set(i, NanNew<Uint32>(parentFds[i]));
+    }
+
+    // create AttachedProcess instance
+    Local<Function> AttachedProcess = args[0].As<Function>();
+
+    const int argc = 4;
+    Local<Value> argv[argc] = {
+        NanNew("OpenCommand"),
+        fdArray,
+        NanNew(false),
+        args.Holder()->Get(NanNew("owner"))
+    };
+
+    Local<Object> attachedProcess = AttachedProcess->NewInstance(argc, argv);
+
+    // queue worker
+    AttachWorker* attachWorker = new AttachWorker(container, attachedProcess,
+            openCommand, "/", std::vector<std::string>(), childFds, false,
+            CLONE_NEWNS | CLONE_NEWUSER, false, uid, gid);
     NanAsyncQueueWorker(attachWorker);
 
     NanReturnValue(attachedProcess);
@@ -486,6 +536,8 @@ void Init(Handle<Object> exports) {
 
     NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "getCgroupItem", GetCgroupItem);
     NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "setCgroupItem", SetCgroupItem);
+
+    NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "open", Open);
 
     NanAssignPersistent(containerConstructor, constructorTemplate->GetFunction());
 
