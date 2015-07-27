@@ -205,7 +205,7 @@ void AttachWorker::LxcExecute() {
             // exec failed, reap child process
 
             do {
-                waitpid(pid_, nullptr, 0);
+                ret = waitpid(pid_, nullptr, 0);
             } while (ret == -1 && errno == EINTR);
         }
     }
