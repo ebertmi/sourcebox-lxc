@@ -330,19 +330,14 @@ int ExecCommand::Attach(int errorFd) {
 }
 
 int OpenCommand::Attach() {
-    if (geteuid() != 0) {
-        // drop all capabilites
-        cap_t caps = cap_get_proc();
-        cap_clear(caps);
-        cap_set_proc(caps);
-        cap_free(caps);
-    }
+    InitialCleanup();
 
     int fd = open(path_.c_str(), flags_, mode_);
 
     if (fd < 0) {
         fprintf(stderr, "%d", errno);
         fflush(stderr);
+        fclose(stderr);
         return 1;
     }
 
@@ -350,9 +345,52 @@ int OpenCommand::Attach() {
     fflush(stdout);
     fclose(stdout);
 
-    // wait until node opens the fd and kills this process
-    pause();
+    // Wait until node has read the FD and signaled this by closing stdin.
+    while (getchar() != EOF);
+
     return 0;
+}
+
+void OpenCommand::InitialCleanup() {
+    // Do some cleanup that normally gets done automatically by execve(). But
+    // we are not execing anything here.
+
+    // Drop all capabilites if we are not root.
+    if (geteuid() != 0) {
+        cap_t caps = cap_get_proc();
+        cap_clear(caps);
+        cap_set_proc(caps);
+        cap_free(caps);
+    }
+
+    // Close all FDs >= 3.
+    DIR *dir = opendir("/proc/self/fd");
+
+    if (dir) {
+        dirent *de;
+
+        while ((de = readdir(dir))) {
+            char *name = de->d_name;
+
+            if (name[0] == '.') {
+                continue;
+            }
+
+            int fd = atoi(name);
+
+            if (fd >= 3) {
+                close(fd);
+            }
+        }
+
+        closedir(dir);
+    } else {
+        int maxfd = getdtablesize();
+
+        for (int fd = 3; fd < maxfd; fd++) {
+            close(fd);
+        }
+    }
 }
 
 void CreateFds(Local<Value> streams, Local<Value> term,

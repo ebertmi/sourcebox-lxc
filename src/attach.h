@@ -66,6 +66,8 @@ public:
     int Attach() override;
 
 private:
+    static void InitialCleanup();
+
     std::string path_;
     int flags_;
     int mode_;
