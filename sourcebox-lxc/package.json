@@ -1,6 +1,6 @@
 {
-  "name": "sourcebox",
-  "description": "LXC-based sandbox",
+  "name": "sourcebox-lxc",
+  "description": "LXC bindings",
   "version": "0.0.1",
   "author": "Johannes Henninger <johannes@henninger.io>",
   "license": "GPL-3.0+",
