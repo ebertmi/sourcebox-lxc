@@ -281,10 +281,10 @@ Container.prototype.open = function (path, flags, options, callback) {
   }));
 };
 
-module.exports = function (name, path, callback) {
+function lxc(name, path, callback) {
   if (!_.isString(path)) {
     if (!_.isFunction(path)) {
-      throw new TypeError("path argument must be a string");
+      throw new TypeError('path argument must be a string');
     }
 
     callback = path;
@@ -298,4 +298,8 @@ module.exports = function (name, path, callback) {
 
     callback(null, new Container(container));
   });
-};
+}
+
+lxc.version = binding.version;
+
+module.exports = lxc;

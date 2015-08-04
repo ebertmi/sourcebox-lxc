@@ -4,8 +4,6 @@ var events = require('events');
 var net = require('net');
 var util = require('util');
 
-var _ = require('lodash');
-
 var binding = require('bindings')('lxc.node');
 var common = require('./common');
 
@@ -67,7 +65,7 @@ function TTYStream(options) {
   tty.guessHandleType = guessHandleType;
 
   this.on('error', function (err) {
-    if (err.code === "EIO") {
+    if (err.code === 'EIO') {
       // child exited
       return;
     }

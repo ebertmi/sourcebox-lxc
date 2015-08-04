@@ -544,6 +544,7 @@ void Init(Handle<Object> exports) {
     // Exports
     exports->Set(NanNew("getContainer"),
             NanNew<FunctionTemplate>(GetContainer)->GetFunction());
+    exports->Set(NanNew("version"), NanNew(lxc_get_version()));
 
 }
 
