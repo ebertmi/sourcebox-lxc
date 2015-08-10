@@ -1,5 +1,5 @@
 {
-  "name": "sourcebox-lxc",
+  "name": "@sourcebox/lxc",
   "description": "LXC bindings",
   "version": "0.0.1",
   "author": "Johannes Henninger <johannes@henninger.io>",
