@@ -53,7 +53,7 @@ binding.setExitCallback(exitCallback);
  * @class
  * @private
  */
-function TTYStream(options) {
+function TTYStream(fd) {
   var tty = process.binding('tty_wrap');
   var guessHandleType = tty.guessHandleType;
 
@@ -61,7 +61,13 @@ function TTYStream(options) {
     return 'PIPE';
   };
 
-  TTYStream.super_.call(this, options);
+  TTYStream.super_.call(this, {
+          fd: fd,
+          readable: true,
+          writable: true,
+          allowHalfOpen: false
+        });
+
   tty.guessHandleType = guessHandleType;
 
   this.on('error', function (err) {
@@ -74,11 +80,19 @@ function TTYStream(options) {
       throw err;
     }
   });
+
+  this.on('close', function () {
+    // hack, for some reason the socket does not always emit 'end'
+    this.push(null);
+  });
+
+  this.on('finish', this.destroy);
 }
 
 util.inherits(TTYStream, net.Socket);
 
 TTYStream.prototype.resize = function (cols, rows) {
+  // FIXME check if destroyed?
   binding.resize(this._handle.fd, cols, rows);
 };
 
@@ -115,11 +129,7 @@ function AttachedProcess(command, fds, term, container) {
 
     if (i < 3 && term) {
       if (i === 0) {
-        stream = new TTYStream({
-          fd: fd,
-          readable: true,
-          writable: true
-        });
+        stream = new TTYStream(fd);
       } else {
         stream = this.stdio[0];
       }

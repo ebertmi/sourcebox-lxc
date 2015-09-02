@@ -14,7 +14,8 @@ var common = require('./common.js');
  * @class
  * @protected
  */
-function Container(container) {
+function Container(name, container) {
+  this._name = name;
   this._container = container;
   this._container.owner = this;
 }
@@ -71,7 +72,7 @@ Container.prototype.clone = function (name, options, callback) {
       return callback(err);
     }
 
-    callback(null, new Container(container));
+    callback(null, new Container(name, container));
   });
 };
 
@@ -296,7 +297,7 @@ function lxc(name, path, callback) {
       return callback(err);
     }
 
-    callback(null, new Container(container));
+    callback(null, new Container(name, container));
   });
 }
 

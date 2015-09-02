@@ -2,7 +2,6 @@
 
 var util = require('util');
 
-
 exports.errnoException = function (errno, syscall, path) {
   errno = -errno;
   var err;
