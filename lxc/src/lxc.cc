@@ -264,7 +264,7 @@ NAN_METHOD(Attach) {
     NanReturnValue(attachedProcess);
 }
 
-NAN_METHOD(Open) {
+NAN_METHOD(OpenFile) {
     NanScope();
 
     if (!args[0]->IsFunction() || !args[1]->IsString() || !args[2]->IsUint32() ||
@@ -537,7 +537,7 @@ void Init(Handle<Object> exports) {
     NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "getCgroupItem", GetCgroupItem);
     NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "setCgroupItem", SetCgroupItem);
 
-    NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "open", Open);
+    NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "openFile", OpenFile);
 
     NanAssignPersistent(containerConstructor, constructorTemplate->GetFunction());
 

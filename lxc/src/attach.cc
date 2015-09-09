@@ -496,8 +496,8 @@ NAN_METHOD(Resize) {
     int fd = args[0]->Uint32Value();
 
     winsize size;
-    size.ws_row = args[1]->Uint32Value();
-    size.ws_col = args[2]->Uint32Value();
+    size.ws_col = args[1]->Uint32Value();
+    size.ws_row = args[2]->Uint32Value();
     size.ws_xpixel = 0;
     size.ws_ypixel = 0;
 

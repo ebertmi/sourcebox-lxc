@@ -62,24 +62,13 @@ function TTYStream(fd) {
   };
 
   TTYStream.super_.call(this, {
-          fd: fd,
-          readable: true,
-          writable: true,
-          allowHalfOpen: false
-        });
+    fd: fd,
+    readable: true,
+    writable: true,
+    allowHalfOpen: false
+  });
 
   tty.guessHandleType = guessHandleType;
-
-  this.on('error', function (err) {
-    if (err.code === 'EIO') {
-      // child exited
-      return;
-    }
-
-    if (this.listeners('error').length <= 1) {
-      throw err;
-    }
-  });
 
   this.on('close', function () {
     // hack, for some reason the socket does not always emit 'end'
@@ -90,6 +79,14 @@ function TTYStream(fd) {
 }
 
 util.inherits(TTYStream, net.Socket);
+
+TTYStream.prototype.emit = function (event, error) {
+  if (event == 'error' && error.code == 'EIO') {
+    return true;
+  }
+
+  return TTYStream.super_.prototype.emit.apply(this, arguments);
+};
 
 TTYStream.prototype.resize = function (cols, rows) {
   // FIXME check if destroyed?

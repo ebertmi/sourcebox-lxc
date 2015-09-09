@@ -50,12 +50,6 @@ Container.prototype.state = function () {
 };
 
 Container.prototype.clone = function (name, options, callback) {
-  var defaults = {
-    snapshot: true,
-    keepname: false,
-    keepmac: false
-  };
-
   if (!_.isPlainObject(options)) {
     if (!_.isFunction(options)) {
       throw new TypeError('options argument must be an object');
@@ -65,7 +59,11 @@ Container.prototype.clone = function (name, options, callback) {
     options = {};
   }
 
-  options = _.assign(defaults, options);
+  options = _.defaults({}, options, {
+    snapshot: true,
+    keepname: false,
+    keepmac: false
+  });
 
   this._container.clone(name, options, function (err, container) {
     if (err) {
@@ -104,15 +102,13 @@ Container.prototype.attach = function (command, args, options) {
     }
   }
 
-  var defaults = {
+  options = _.defaults({}, options, {
     cwd: '/',
     env: {},
     term: false,
     cgroup: true,
     streams: 0
-  };
-
-  options = _.assign(defaults, options);
+  });
 
   options.env = Object.keys(options.env).map(function (key) {
     return key + '=' + options.env[key];
@@ -224,7 +220,7 @@ Container.prototype.setCgroupItem = function (key, value) {
  * This method is necessary because opening a file from the outside is
  * vulnerable to symlink attacks.
  */
-Container.prototype.open = function (path, flags, options, callback) {
+Container.prototype.openFile = function (path, flags, options, callback) {
   if (!_.isPlainObject(options)) {
     if (!_.isFunction(options)) {
       throw new TypeError('options argument must be an object');
@@ -234,13 +230,11 @@ Container.prototype.open = function (path, flags, options, callback) {
     options = {};
   }
 
-  var defaults = {
+  options = _.defaults({}, options, {
     mode: 420, // = 0644
     uid: 0,
     gid: 0
-  };
-
-  options = _.assign(defaults, options);
+  });
 
   if (_.isString(options.mode)) {
     options.mode = parseInt(options.mode);
@@ -249,8 +243,8 @@ Container.prototype.open = function (path, flags, options, callback) {
   flags = fs._stringToFlags(flags);
   callback = _.once(callback);
 
-  var helper = this._container.open(AttachedProcess, path, flags, options.mode,
-                                    options.uid, options.gid);
+  var helper = this._container.openFile(AttachedProcess, path, flags,
+                                        options.mode, options.uid, options.gid);
 
   helper.on('error', callback);
 
