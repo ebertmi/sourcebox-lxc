@@ -6,7 +6,7 @@
 class GetWorker : public AsyncWorker {
 public:
     GetWorker(NanCallback *callback, const std::string& name,
-            const std::string& path, bool errorIfUndefined);
+            const std::string& path, bool requireDefined);
 
 private:
     void Execute() override;
@@ -14,7 +14,6 @@ private:
 
     std::string name_;
     std::string path_;
-    bool errorIfUndefined_;
 };
 
 #endif

@@ -11,6 +11,8 @@ public:
 
 protected:
     lxc_container *container_;
+
+    bool requireDefined_ = true;
 };
 
 /**

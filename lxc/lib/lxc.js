@@ -20,6 +20,23 @@ function Container(name, container) {
   this._container.owner = this;
 }
 
+Container.prototype.create = function (template, backingstore, args, callback) {
+  if (!_.isString(template)) {
+    throw new TypeError('template argument must be a string');
+  }
+
+  if (!_.isString(backingstore)) {
+    throw new TypeError('backingstore argument must be a string');
+  }
+
+  if (_.isFunction(args)) {
+    callback = args;
+    args = [];
+  }
+
+  this._container.create(template, backingstore, args, callback);
+};
+
 Container.prototype.start = function (command, args, callback) {
   if (!_.isString(command)) {
     throw new TypeError('command argument must be a string');
@@ -276,17 +293,18 @@ Container.prototype.openFile = function (path, flags, options, callback) {
   }));
 };
 
-function lxc(name, path, callback) {
-  if (!_.isString(path)) {
-    if (!_.isFunction(path)) {
-      throw new TypeError('path argument must be a string');
-    }
-
-    callback = path;
-    path = '';
+function getContainer(name, options, callback) {
+  if (_.isFunction(options)) {
+    callback = options;
+    options = {};
   }
 
-  binding.getContainer(name, path, function (err, container) {
+  options = _.defaults({}, options, {
+    path: '',
+    defined: true
+  });
+
+  binding.getContainer(name, options.path, options.defined, function (err, container) {
     if (err) {
       return callback(err);
     }
@@ -295,6 +313,6 @@ function lxc(name, path, callback) {
   });
 }
 
-lxc.version = binding.version;
-
-module.exports = lxc;
+module.exports = exports = getContainer;
+exports.getContainer = getContainer;
+exports.version = binding.version;

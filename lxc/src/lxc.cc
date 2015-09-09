@@ -10,10 +10,11 @@
 #include <nan.h>
 
 #include "get.h"
+#include "create.h"
+#include "clone.h"
+#include "destroy.h"
 #include "start.h"
 #include "stop.h"
-#include "destroy.h"
-#include "clone.h"
 #include "attach.h"
 
 using namespace v8;
@@ -97,6 +98,27 @@ NAN_METHOD(Start) {
     NanCallback *callback = new NanCallback(args[1].As<Function>());
 
     NanAsyncQueueWorker(new StartWorker(container, callback, arguments));
+
+    NanReturnUndefined();
+}
+
+NAN_METHOD(Create) {
+    NanScope();
+
+    if (!args[0]->IsString() || !args[1]->IsString() || !args[2]->IsArray()
+            || !args[3]->IsFunction()) {
+        return NanThrowTypeError("Invalid argument");
+    }
+
+    lxc_container *container = Unwrap(args.Holder());
+
+    NanCallback *callback= new NanCallback(args[3].As<Function>());
+
+    CreateWorker *worker = new CreateWorker(container, callback,
+            *String::Utf8Value(args[0]), *String::Utf8Value(args[1]),
+            JsArrayToVector(args[2].As<Array>()));
+
+    NanAsyncQueueWorker(worker);
 
     NanReturnUndefined();
 }
@@ -491,16 +513,18 @@ NAN_METHOD(SetCgroupItem) {
 NAN_METHOD(GetContainer) {
     NanScope();
 
-    if (!args[0]->IsString() && !args[1]->IsString() && !args[2]->IsFunction()) {
+    if (!args[0]->IsString() && !args[1]->IsString() && !args[2]->IsBoolean()
+            && !args[3]->IsFunction()) {
         return NanThrowTypeError("Invalid argument");
     }
 
     String::Utf8Value name(args[0]);
     String::Utf8Value path(args[1]);
+    bool defined = args[3]->BooleanValue();
 
-    NanCallback *callback = new NanCallback(args[2].As<Function>());
+    NanCallback *callback = new NanCallback(args[3].As<Function>());
 
-    NanAsyncQueueWorker(new GetWorker(callback, *name, *path, true));
+    NanAsyncQueueWorker(new GetWorker(callback, *name, *path, defined));
 
     NanReturnUndefined();
 }
@@ -520,10 +544,12 @@ void Init(Handle<Object> exports) {
     constructorTemplate->InstanceTemplate()->SetInternalFieldCount(1);
 
     // Methods
-    NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "start", Start);
-    NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "stop", Stop);
+    NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "create", Create);
     NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "destroy", Destroy);
     NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "clone", Clone);
+
+    NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "start", Start);
+    NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "stop", Stop);
 
     NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "state", State);
     NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "attach", Attach);

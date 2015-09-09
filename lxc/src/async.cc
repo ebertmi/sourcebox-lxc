@@ -13,7 +13,7 @@ void LxcWorker::Execute() {
 
     if (!container_->may_control(container_)) {
         SetErrorMessage("Insufficient privileges to control container");
-    } else if (!container_->is_defined(container_)) {
+    } else if (requireDefined_ && !container_->is_defined(container_)) {
         SetErrorMessage("Container is not defined");
     } else {
         LxcExecute();
