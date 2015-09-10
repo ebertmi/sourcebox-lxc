@@ -140,6 +140,23 @@ Container.prototype.attach = function (command, args, options) {
   return this._container.attach(AttachedProcess, command, args, options);
 };
 
+function configFile(container, save, file, callback) {
+  if (_.isFunction(file)) {
+    callback = file;
+    file = '';
+  }
+
+  container.configFile(file, save, callback);
+}
+
+Container.prototype.loadConfig = function (file, callback) {
+  configFile(this._container, false, file, callback);
+};
+
+Container.prototype.saveConfig = function (file, callback) {
+  configFile(this._container, true, file, callback);
+};
+
 Container.prototype.getKeys = function () {
   var keys = this._container.getKeys();
 

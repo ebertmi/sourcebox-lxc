@@ -8,6 +8,7 @@
       "src/create.cc",
       "src/destroy.cc",
       "src/clone.cc",
+      "src/config.cc",
       "src/start.cc",
       "src/stop.cc",
       "src/attach.cc"

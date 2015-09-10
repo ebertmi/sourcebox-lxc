@@ -12,6 +12,7 @@
 #include "get.h"
 #include "create.h"
 #include "clone.h"
+#include "config.h"
 #include "destroy.h"
 #include "start.h"
 #include "stop.h"
@@ -112,7 +113,7 @@ NAN_METHOD(Create) {
 
     lxc_container *container = Unwrap(args.Holder());
 
-    NanCallback *callback= new NanCallback(args[3].As<Function>());
+    NanCallback *callback = new NanCallback(args[3].As<Function>());
 
     CreateWorker *worker = new CreateWorker(container, callback,
             *String::Utf8Value(args[0]), *String::Utf8Value(args[1]),
@@ -347,6 +348,26 @@ NAN_METHOD(State) {
     NanReturnValue(state);
 }
 
+NAN_METHOD(ConfigFile) {
+    NanScope();
+
+    if (!args[0]->IsString() || !args[1]->IsBoolean()
+            || !args[2]->IsFunction()) {
+        return NanThrowTypeError("Invalid argument");
+    }
+
+    lxc_container *container = Unwrap(args.Holder());
+
+    NanCallback *callback = new NanCallback(args[2].As<Function>());
+
+    String::Utf8Value file(args[0]);
+    bool save = args[1]->BooleanValue();
+
+    NanAsyncQueueWorker(new ConfigWorker(container, callback, *file, save));
+
+    NanReturnUndefined();
+}
+
 NAN_METHOD(GetKeys) {
     NanScope();
 
@@ -520,7 +541,7 @@ NAN_METHOD(GetContainer) {
 
     String::Utf8Value name(args[0]);
     String::Utf8Value path(args[1]);
-    bool defined = args[3]->BooleanValue();
+    bool defined = args[2]->BooleanValue();
 
     NanCallback *callback = new NanCallback(args[3].As<Function>());
 
@@ -554,6 +575,7 @@ void Init(Handle<Object> exports) {
     NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "state", State);
     NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "attach", Attach);
 
+    NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "configFile", ConfigFile);
     NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "getKeys", GetKeys);
     NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "getConfigItem", GetConfigItem);
     NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "setConfigItem", SetConfigItem);
