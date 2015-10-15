@@ -25,18 +25,5 @@
     "include_dirs": [
       "<!(node -e \"require('nan')\")"
     ]
-  },
-  {
-    "target_name": "sourcebox-init",
-    "type": "executable",
-    "sources": [
-      "src/init.c"
-    ],
-    "cflags!": [
-      "-pthread"
-    ],
-    "ldflags!": [
-      "-pthread"
-    ]
   }]
 }
