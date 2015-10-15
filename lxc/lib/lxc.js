@@ -127,8 +127,12 @@ Container.prototype.attach = function (command, args, options) {
     streams: 0
   });
 
-  options.env = Object.keys(options.env).map(function (key) {
-    return key + '=' + options.env[key];
+  options.env = _.map(options.env, function (value, key) {
+    if (value === null || value === undefined) {
+      return;
+    }
+
+    return key + '=' + value;
   });
 
   if (_.isArray(options.namespaces)) {
@@ -265,13 +269,13 @@ Container.prototype.openFile = function (path, flags, options, callback) {
   }
 
   options = _.defaults({}, options, {
-    mode: 420, // = 0644
+    mode: 438, // = 0666, will be changed by umask (probably to 0644)
     uid: 0,
     gid: 0
   });
 
   if (_.isString(options.mode)) {
-    options.mode = parseInt(options.mode);
+    options.mode = parseInt(options.mode, 8);
   }
 
   flags = fs._stringToFlags(flags);
@@ -333,3 +337,4 @@ function getContainer(name, options, callback) {
 module.exports = exports = getContainer;
 exports.getContainer = getContainer;
 exports.version = binding.version;
+exports._Container = Container; // export container for auto promisification
