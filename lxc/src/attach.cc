@@ -12,8 +12,8 @@
 
 using namespace v8;
 
-NanCallback *exitCallback = new NanCallback();
-static Persistent<Object> attachedProcesses;
+Nan::Callback *exitCallback = new Nan::Callback();
+static Nan::Persistent<Object> attachedProcesses;
 static uv_signal_t sigchldHandle;
 
 static inline int SetFdFlags(int fd, int flags) {
@@ -33,15 +33,15 @@ static inline int SetFlFlags(int fd, int flags) {
 }
 
 static void MaybeUnref() {
-    NanScope();
+    Nan::HandleScope scope;
 
-    Local<Object> processes = NanNew(attachedProcesses);
+    Local<Object> processes = Nan::New(attachedProcesses);
     Local<Array> pids = processes->GetOwnPropertyNames();
     int length = pids->Length();
 
     for (int i = 0; i < length; i++) {
         Local<Object> process = processes->Get(pids->Get(i))->ToObject();
-        if (process->Get(NanNew("_ref"))->BooleanValue()) {
+        if (process->Get(Nan::New("_ref").ToLocalChecked())->BooleanValue()) {
             // at least one process is still referenced
             return;
         }
@@ -51,9 +51,9 @@ static void MaybeUnref() {
 }
 
 static void ReapChildren(uv_signal_t* handle, int signal) {
-    NanScope();
+    Nan::HandleScope scope;
 
-    Local<Object> processes = NanNew(attachedProcesses);
+    Local<Object> processes = Nan::New(attachedProcesses);
     Local<Array> pids = processes->GetOwnPropertyNames();
     int length = pids->Length();
 
@@ -90,11 +90,11 @@ static void ReapChildren(uv_signal_t* handle, int signal) {
         Local<Value> signalCode;
 
         if (WIFEXITED(status)) {
-            exitCode = NanNew<Uint32>(WEXITSTATUS(status));
-            signalCode = NanNull();
+            exitCode = Nan::New<Uint32>(WEXITSTATUS(status));
+            signalCode = Nan::Null();
         } else if (WIFSIGNALED(status)) {
-            signalCode = NanNew(node::signo_string(WTERMSIG(status)));
-            exitCode = NanNull();
+            signalCode = Nan::New(node::signo_string(WTERMSIG(status))).ToLocalChecked();
+            exitCode = Nan::Null();
         } else {
             // child process got stopped or continued
             continue;
@@ -124,6 +124,7 @@ AttachWorker::AttachWorker(lxc_container *container, Local<Object> attachedProce
         : LxcWorker(container, nullptr), command_(command), cwd_(cwd),
         fds_(fds), term_(term), cgroup_(cgroup),
         namespaces_(namespaces), uid_(uid), gid_(gid) {
+    Nan::HandleScope scope;
 
     SaveToPersistent("attachedProcess", attachedProcess);
 
@@ -214,36 +215,36 @@ void AttachWorker::LxcExecute() {
 }
 
 void AttachWorker::HandleOKCallback() {
-    NanScope();
+    Nan::HandleScope scope;
 
-    Local<Object> attachedProcess = GetFromPersistent("attachedProcess");
-    Local<Uint32> pid = NanNew<Uint32>(pid_);
+    Local<Object> attachedProcess = GetFromPersistent("attachedProcess")->ToObject();
+    Local<Uint32> pid = Nan::New<Uint32>(pid_);
 
-    attachedProcess->Set(NanNew("pid"), pid);
+    attachedProcess->Set(Nan::New("pid").ToLocalChecked(), pid);
 
     if (execErrno_ == 0) {
-        Local<Object> processes = NanNew(attachedProcesses);
+        Local<Object> processes = Nan::New(attachedProcesses);
         processes->Set(pid_, attachedProcess);
 
-        if (attachedProcess->Get(NanNew("_ref"))->BooleanValue()) {
+        if (attachedProcess->Get(Nan::New("_ref").ToLocalChecked())->BooleanValue()) {
             uv_ref(reinterpret_cast<uv_handle_t*>(&sigchldHandle));
         }
 
         const int argc = 2;
         Local<Value> argv[argc] = {
-            NanNew("attach"),
+            Nan::New("attach").ToLocalChecked(),
             pid
         };
 
-        Local<Function> emit = attachedProcess->Get(NanNew("emit")).As<Function>();
-        NanMakeCallback(attachedProcess, emit, argc, argv);
+        Local<Function> emit = attachedProcess->Get(Nan::New("emit").ToLocalChecked()).As<Function>();
+        Nan::MakeCallback(attachedProcess, emit, argc, argv);
     } else {
         // Attaching was successful but exec failed
 
         const int argc = 2;
         Local<Value> argv[argc] = {
             attachedProcess,
-            NanNew<Int32>(-execErrno_)
+            Nan::New<Int32>(-execErrno_)
         };
 
         exitCallback->Call(argc, argv);
@@ -251,18 +252,18 @@ void AttachWorker::HandleOKCallback() {
 }
 
 void AttachWorker::HandleErrorCallback() {
-    NanScope();
+    Nan::HandleScope scope;
 
-    Local<Object> attachedProcess = GetFromPersistent("attachedProcess");
+    Local<Object> attachedProcess = GetFromPersistent("attachedProcess")->ToObject();
 
     const int argc = 2;
     Local<Value> argv[argc] = {
-        NanNew("error"),
-        NanError(ErrorMessage())
+        Nan::New("error").ToLocalChecked(),
+        Nan::Error(ErrorMessage())
     };
 
-    Local<Function> emit = attachedProcess->Get(NanNew("emit")).As<Function>();
-    NanMakeCallback(attachedProcess, emit, argc, argv);
+    Local<Function> emit = attachedProcess->Get(Nan::New("emit").ToLocalChecked()).As<Function>();
+    Nan::MakeCallback(attachedProcess, emit, argc, argv);
 }
 
 // This method gets called within the container
@@ -297,6 +298,8 @@ int AttachCommand::Attach() {
 
 ExecCommand::ExecCommand(const std::string& command,
         const std::vector<std::string>& args) {
+    Nan::HandleScope scope;
+
     args_.resize(args.size() + 2);
     args_.front() = strdup(command.c_str());
     args_.back() = nullptr;
@@ -395,6 +398,8 @@ void OpenCommand::InitialCleanup() {
 
 void CreateFds(Local<Value> streams, Local<Value> term,
         std::vector<int>& childFds, std::vector<int>& parentFds) {
+    Nan::HandleScope scope;
+
     int count = 3;
     int pos = 0; // TODO iterator?
 
@@ -413,8 +418,8 @@ void CreateFds(Local<Value> streams, Local<Value> term,
         size.ws_ypixel = 0;
 
         Local<Object> termOptions = term->ToObject();
-        Local<Value> rows = termOptions->Get(NanNew("rows"));
-        Local<Value> columns = termOptions->Get(NanNew("columns"));
+        Local<Value> rows = termOptions->Get(Nan::New("rows").ToLocalChecked());
+        Local<Value> columns = termOptions->Get(Nan::New("columns").ToLocalChecked());
 
         size.ws_row = rows->IsUint32() ? rows->Uint32Value() : 24;
         size.ws_col = columns->IsUint32() ? columns->Uint32Value() : 80;
@@ -455,77 +460,61 @@ void CreateFds(Local<Value> streams, Local<Value> term,
 // Javascript Functions
 
 NAN_METHOD(Ref) {
-    NanScope();
-
-    if (!args[0]->IsUint32()) {
-        return NanThrowTypeError("Invalid argument");
+    if (!info[0]->IsUint32()) {
+        return Nan::ThrowTypeError("Invalid argument");
     }
 
-    Local<Object> processes = NanNew(attachedProcesses);
+    Local<Object> processes = Nan::New(attachedProcesses);
 
-    if (processes->Has(args[0]->Uint32Value())) {
+    if (processes->Has(info[0]->Uint32Value())) {
         uv_ref(reinterpret_cast<uv_handle_t*>(&sigchldHandle));
     }
-
-    NanReturnUndefined();
 }
 
 NAN_METHOD(Unref) {
-    NanScope();
-
-    if (!args[0]->IsUint32()) {
-        return NanThrowTypeError("Invalid argument");
+    if (!info[0]->IsUint32()) {
+        return Nan::ThrowTypeError("Invalid argument");
     }
 
-    Local<Object> processes = NanNew(attachedProcesses);
+    Local<Object> processes = Nan::New(attachedProcesses);
 
-    if (processes->Has(args[0]->Uint32Value())) {
+    if (processes->Has(info[0]->Uint32Value())) {
         MaybeUnref();
     }
-
-    NanReturnUndefined();
 }
 
 NAN_METHOD(Resize) {
-    NanScope();
-
-    if (!args[0]->IsUint32() || !args[1]->IsUint32() || !args[1]->IsUint32()) {
-        return NanThrowTypeError("Invalid argument");
+    if (!info[0]->IsUint32() || !info[1]->IsUint32() || !info[1]->IsUint32()) {
+        return Nan::ThrowTypeError("Invalid argument");
     }
 
-    int fd = args[0]->Uint32Value();
+    int fd = info[0]->Uint32Value();
 
     winsize size;
-    size.ws_col = args[1]->Uint32Value();
-    size.ws_row = args[2]->Uint32Value();
+    size.ws_col = info[1]->Uint32Value();
+    size.ws_row = info[2]->Uint32Value();
     size.ws_xpixel = 0;
     size.ws_ypixel = 0;
 
     if (ioctl(fd, TIOCSWINSZ, &size) < 0) {
-        return NanThrowError(strerror(errno));
+        return Nan::ThrowError(strerror(errno));
     }
-
-    NanReturnUndefined();
 }
 
 NAN_METHOD(SetExitCallback) {
-    NanScope();
-
-    if (!args[0]->IsFunction()) {
-        return NanThrowTypeError("Invalid argument");
+    if (!info[0]->IsFunction()) {
+        return Nan::ThrowTypeError("Invalid argument");
     }
 
-    exitCallback->SetFunction(args[0].As<Function>());
-
-    NanReturnUndefined();
+    exitCallback->SetFunction(info[0].As<Function>());
 }
 
 // Initialization
 
 void AttachInit(Handle<Object> exports) {
-    NanScope();
+    Nan::HandleScope scope;
 
-    NanAssignPersistent(attachedProcesses, NanNew<Object>());
+    attachedProcesses.Reset(Nan::New<Object>());
 
     // SIGCHLD handling
     uv_signal_init(uv_default_loop(), &sigchldHandle);
@@ -533,10 +522,12 @@ void AttachInit(Handle<Object> exports) {
     uv_unref(reinterpret_cast<uv_handle_t*>(&sigchldHandle));
 
     // Exports
-    exports->Set(NanNew("ref"), NanNew<FunctionTemplate>(Ref)->GetFunction());
-    exports->Set(NanNew("unref"), NanNew<FunctionTemplate>(Unref)->GetFunction());
-    exports->Set(NanNew("resize"),
-            NanNew<FunctionTemplate>(Resize)->GetFunction());
-    exports->Set(NanNew("setExitCallback"),
-            NanNew<FunctionTemplate>(SetExitCallback)->GetFunction());
+    exports->Set(Nan::New("ref").ToLocalChecked(),
+            Nan::New<FunctionTemplate>(Ref)->GetFunction());
+    exports->Set(Nan::New("unref").ToLocalChecked(),
+            Nan::New<FunctionTemplate>(Unref)->GetFunction());
+    exports->Set(Nan::New("resize").ToLocalChecked(),
+            Nan::New<FunctionTemplate>(Resize)->GetFunction());
+    exports->Set(Nan::New("setExitCallback").ToLocalChecked(),
+            Nan::New<FunctionTemplate>(SetExitCallback)->GetFunction());
 }

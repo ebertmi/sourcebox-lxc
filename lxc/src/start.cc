@@ -2,9 +2,9 @@
 
 using namespace v8;
 
-StartWorker::StartWorker(lxc_container *container, NanCallback *callback,
+StartWorker::StartWorker(lxc_container *container, Nan::Callback *callback,
         Local<Array> arguments) : LxcWorker(container, callback) {
-    NanScope();
+    Nan::HandleScope scope;
 
     args_.resize(arguments->Length() + 1, nullptr);
 

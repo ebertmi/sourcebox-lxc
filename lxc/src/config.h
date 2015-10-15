@@ -5,7 +5,7 @@
 
 class ConfigWorker : public LxcWorker {
 public:
-    ConfigWorker(lxc_container *container, NanCallback *callback,
+    ConfigWorker(lxc_container *container, Nan::Callback *callback,
             const std::string& file, bool save);
 
 private:

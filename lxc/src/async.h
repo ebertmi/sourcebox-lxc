@@ -5,9 +5,9 @@
 #include <nan.h>
 #include <lxc/lxccontainer.h>
 
-class AsyncWorker : public NanAsyncWorker {
+class AsyncWorker : public Nan::AsyncWorker {
 public:
-    AsyncWorker(lxc_container *container, NanCallback *callback);
+    AsyncWorker(lxc_container *container, Nan::Callback *callback);
 
 protected:
     lxc_container *container_;

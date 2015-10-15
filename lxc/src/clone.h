@@ -5,7 +5,7 @@
 
 class CloneWorker : public LxcWorker {
 public:
-    CloneWorker(lxc_container *container, NanCallback *callback,
+    CloneWorker(lxc_container *container, Nan::Callback *callback,
             v8::Local<v8::String> name, v8::Local<v8::Object> options);
 
 private:

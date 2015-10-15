@@ -7,7 +7,7 @@
 
 class StartWorker : public LxcWorker {
 public:
-    StartWorker(lxc_container *container, NanCallback *callback,
+    StartWorker(lxc_container *container, Nan::Callback *callback,
             v8::Local<v8::Array> args);
 
     ~StartWorker();

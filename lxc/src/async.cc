@@ -2,8 +2,8 @@
 
 using namespace v8;
 
-AsyncWorker::AsyncWorker(lxc_container *container, NanCallback *callback)
-    : NanAsyncWorker(callback), container_(container) { }
+AsyncWorker::AsyncWorker(lxc_container *container, Nan::Callback *callback)
+    : Nan::AsyncWorker(callback), container_(container) { }
 
 void LxcWorker::Execute() {
     if (!lxc_container_get(container_)) {

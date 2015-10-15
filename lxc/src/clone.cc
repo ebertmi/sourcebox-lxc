@@ -3,36 +3,36 @@
 
 using namespace v8;
 
-CloneWorker::CloneWorker(lxc_container *container, NanCallback *callback,
+CloneWorker::CloneWorker(lxc_container *container, Nan::Callback *callback,
         Local<String> name, Local<Object> options) : LxcWorker(container, callback) {
-    NanScope();
+    Nan::HandleScope scope;
 
     name_ = *String::Utf8Value(name);
 
-    Local<Value> path = options->Get(NanNew("path"));
+    Local<Value> path = options->Get(Nan::New("path").ToLocalChecked());
     if (path->IsString()) {
         path_ = *String::Utf8Value(path);
     }
 
-    Local<Value> bdevtype= options->Get(NanNew("backingstore"));
+    Local<Value> bdevtype= options->Get(Nan::New("backingstore").ToLocalChecked());
     if (bdevtype->IsString()) {
         bdevtype_ = *String::Utf8Value(bdevtype);
     }
 
-    Local<Value> size = options->Get(NanNew("size"));
+    Local<Value> size = options->Get(Nan::New("size").ToLocalChecked());
     if (size->IsNumber()) {
         size_ = size->Uint32Value();
     }
 
-    if (options->Get(NanNew("snapshot"))->IsTrue()) {
+    if (options->Get(Nan::New("snapshot").ToLocalChecked())->IsTrue()) {
         flags_ |= LXC_CLONE_SNAPSHOT;
     }
 
-    if (options->Get(NanNew("keepname"))->IsTrue()) {
+    if (options->Get(Nan::New("keepname").ToLocalChecked())->IsTrue()) {
         flags_ |= LXC_CLONE_KEEPNAME;
     }
 
-    if (options->Get(NanNew("keepmac"))->IsTrue()) {
+    if (options->Get(Nan::New("keepmac").ToLocalChecked())->IsTrue()) {
         flags_ |= LXC_CLONE_KEEPMACADDR;
     }
 }
@@ -55,13 +55,13 @@ void CloneWorker::LxcExecute() {
 }
 
 void CloneWorker::HandleOKCallback() {
-    NanScope();
+    Nan::HandleScope scope;
 
     Local<Object> wrap = Wrap(clone_);
 
     const int argc = 2;
     Local<Value> argv[argc] = {
-        NanNull(),
+        Nan::Null(),
         wrap
     };
 

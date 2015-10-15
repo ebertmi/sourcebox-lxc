@@ -2,7 +2,7 @@
 
 using namespace v8;
 
-CreateWorker::CreateWorker(lxc_container *container, NanCallback *callback,
+CreateWorker::CreateWorker(lxc_container *container, Nan::Callback *callback,
         const std::string& templateName, const std::string bdevtype,
         const std::vector<std::string>& args)
         : LxcWorker(container, callback), template_(templateName), bdevtype_(bdevtype) {

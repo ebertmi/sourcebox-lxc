@@ -1,6 +1,6 @@
 #include "config.h"
 
-ConfigWorker::ConfigWorker(lxc_container *container, NanCallback *callback,
+ConfigWorker::ConfigWorker(lxc_container *container, Nan::Callback *callback,
         const std::string& file, bool save)
         : LxcWorker(container, callback), file_(file), save_(save) {
     requireDefined_ = false;

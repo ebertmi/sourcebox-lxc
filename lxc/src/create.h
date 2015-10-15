@@ -7,7 +7,7 @@
 
 class CreateWorker : public LxcWorker {
 public:
-    CreateWorker(lxc_container *container, NanCallback *callback, const std::string& templateName,
+    CreateWorker(lxc_container *container, Nan::Callback *callback, const std::string& templateName,
             const std::string bdevtype, const std::vector<std::string>& args);
     ~CreateWorker();
 

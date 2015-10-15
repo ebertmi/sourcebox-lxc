@@ -20,7 +20,7 @@
 
 using namespace v8;
 
-static Persistent<Function> containerConstructor;
+static Nan::Persistent<Function> containerConstructor;
 static const pid_t pid = getpid();
 
 static const std::map<std::string, int> nsMap = {
@@ -52,149 +52,126 @@ static void ExitHandler(int status, void *) {
     }
 }
 
-NAN_WEAK_CALLBACK(WeakCallback) {
+void WeakCallback(const Nan::WeakCallbackInfo<lxc_container> &data) {
     lxc_container_put(data.GetParameter());
 }
 
 Local<Object> Wrap(lxc_container *container) {
-    NanEscapableScope();
+    Nan::EscapableHandleScope scope;
 
-    Local<Object> wrap = NanNew(containerConstructor)->NewInstance();
-    NanSetInternalFieldPointer(wrap, 0, container);
+    Local<Object> wrap = Nan::New(containerConstructor)->NewInstance();
+    Nan::SetInternalFieldPointer(wrap, 0, container);
 
-    NanMakeWeakPersistent(wrap, container, &WeakCallback);
+    Nan::Persistent<Object> persistent(wrap);
+    persistent.SetWeak(container, WeakCallback, Nan::WeakCallbackType::kParameter);
 
-    return NanEscapeScope(wrap);
+    return scope.Escape(wrap);
 }
 
 NAN_INLINE lxc_container *Unwrap(Local<Object> object) {
-    void *ptr = NanGetInternalFieldPointer(object, 0);
+    void *ptr = Nan::GetInternalFieldPointer(object, 0);
     return static_cast<lxc_container*>(ptr);
 }
 
 // Constructor
 
 NAN_METHOD(LXCContainer) {
-    NanScope();
-
-    if (args.IsConstructCall()) {
-        NanReturnThis();
+    if (info.IsConstructCall()) {
+        return info.GetReturnValue().Set(info.Holder());
     }
 
-    NanReturnValue(NanNew(containerConstructor)->NewInstance());
+    info.GetReturnValue().Set(Nan::New(containerConstructor)->NewInstance());
 }
 
 // Methods
 
 NAN_METHOD(Start) {
-    NanScope();
-
-    if (!args[0]->IsArray() || !args[1]->IsFunction()) {
-        return NanThrowTypeError("Invalid argument");
+    if (!info[0]->IsArray() || !info[1]->IsFunction()) {
+        return Nan::ThrowTypeError("Invalid argument");
     }
 
-    lxc_container *container = Unwrap(args.Holder());
+    lxc_container *container = Unwrap(info.Holder());
 
-    Local<Array> arguments = args[0].As<Array>();
-    NanCallback *callback = new NanCallback(args[1].As<Function>());
+    Local<Array> arguments = info[0].As<Array>();
+    Nan::Callback *callback = new Nan::Callback(info[1].As<Function>());
 
-    NanAsyncQueueWorker(new StartWorker(container, callback, arguments));
-
-    NanReturnUndefined();
+    Nan::AsyncQueueWorker(new StartWorker(container, callback, arguments));
 }
 
 NAN_METHOD(Create) {
-    NanScope();
-
-    if (!args[0]->IsString() || !args[1]->IsString() || !args[2]->IsArray()
-            || !args[3]->IsFunction()) {
-        return NanThrowTypeError("Invalid argument");
+    if (!info[0]->IsString() || !info[1]->IsString() || !info[2]->IsArray()
+            || !info[3]->IsFunction()) {
+        return Nan::ThrowTypeError("Invalid argument");
     }
 
-    lxc_container *container = Unwrap(args.Holder());
+    lxc_container *container = Unwrap(info.Holder());
 
-    NanCallback *callback = new NanCallback(args[3].As<Function>());
+    Nan::Callback *callback = new Nan::Callback(info[3].As<Function>());
 
     CreateWorker *worker = new CreateWorker(container, callback,
-            *String::Utf8Value(args[0]), *String::Utf8Value(args[1]),
-            JsArrayToVector(args[2].As<Array>()));
+            *String::Utf8Value(info[0]), *String::Utf8Value(info[1]),
+            JsArrayToVector(info[2].As<Array>()));
 
-    NanAsyncQueueWorker(worker);
-
-    NanReturnUndefined();
+    Nan::AsyncQueueWorker(worker);
 }
 
 NAN_METHOD(Stop) {
-    NanScope();
-
-    if (!args[0]->IsFunction()) {
-        return NanThrowTypeError("Invalid argument");
+    if (!info[0]->IsFunction()) {
+        return Nan::ThrowTypeError("Invalid argument");
     }
 
-    lxc_container *container = Unwrap(args.Holder());
+    lxc_container *container = Unwrap(info.Holder());
 
-    NanCallback *callback = new NanCallback(args[0].As<Function>());
+    Nan::Callback *callback = new Nan::Callback(info[0].As<Function>());
 
-    NanAsyncQueueWorker(new StopWorker(container, callback));
-
-    NanReturnUndefined();
+    Nan::AsyncQueueWorker(new StopWorker(container, callback));
 }
 
 NAN_METHOD(Destroy) {
-    NanScope();
-
-    if (!args[0]->IsFunction()) {
-        return NanThrowTypeError("Invalid argument");
+    if (!info[0]->IsFunction()) {
+        return Nan::ThrowTypeError("Invalid argument");
     }
 
-    lxc_container *container = Unwrap(args.Holder());
+    lxc_container *container = Unwrap(info.Holder());
 
-    NanCallback *callback = new NanCallback(args[0].As<Function>());
+    Nan::Callback *callback = new Nan::Callback(info[0].As<Function>());
 
-    NanAsyncQueueWorker(new DestroyWorker(container, callback));
-
-    NanReturnUndefined();
+    Nan::AsyncQueueWorker(new DestroyWorker(container, callback));
 }
 
 NAN_METHOD(Clone) {
-    NanScope();
-
-    if (!args[0]->IsString() || !args[1]->IsObject() || !args[2]->IsFunction()) {
-        return NanThrowTypeError("Invalid argument");
+    if (!info[0]->IsString() || !info[1]->IsObject() || !info[2]->IsFunction()) {
+        return Nan::ThrowTypeError("Invalid argument");
     }
 
-    lxc_container *container = Unwrap(args.Holder());
+    lxc_container *container = Unwrap(info.Holder());
 
-    Local<String> name = args[0]->ToString();
-    Local<Object> options = args[1]->ToObject();
-    NanCallback *callback = new NanCallback(args[2].As<Function>());
+    Local<String> name = info[0]->ToString();
+    Local<Object> options = info[1]->ToObject();
+    Nan::Callback *callback = new Nan::Callback(info[2].As<Function>());
 
-    NanAsyncQueueWorker(new CloneWorker(container, callback, name, options));
-
-    NanReturnUndefined();
+    Nan::AsyncQueueWorker(new CloneWorker(container, callback, name, options));
 }
 
 NAN_METHOD(Attach) {
-    NanScope();
-
-    if (!args[0]->IsFunction() || !args[1]->IsString()
-            || !args[2]->IsArray() || !args[3]->IsObject()) {
-        return NanThrowTypeError("Invalid argument");
+    if (!info[0]->IsFunction() || !info[1]->IsString()
+            || !info[2]->IsArray() || !info[3]->IsObject()) {
+        return Nan::ThrowTypeError("Invalid argument");
     }
 
-    lxc_container *container = Unwrap(args.Holder());
+    lxc_container *container = Unwrap(info.Holder());
 
     // command
-    std::string command = *String::Utf8Value(args[1]);
+    std::string command = *String::Utf8Value(info[1]);
 
     // args
-    std::vector<std::string> arguments = JsArrayToVector(args[2].As<Array>());
+    std::vector<std::string> arguments = JsArrayToVector(info[2].As<Array>());
 
-    Local<Object> options = args[3]->ToObject();
+    Local<Object> options = info[3]->ToObject();
 
     // env
     std::vector<std::string> env;
-    Local<Value> envValue = options->Get(NanNew("env"));
+    Local<Value> envValue = options->Get(Nan::New("env").ToLocalChecked());
 
     if (envValue->IsArray()) {
         env = JsArrayToVector(envValue.As<Array>());
@@ -202,7 +179,7 @@ NAN_METHOD(Attach) {
 
     // cwd
     std::string cwd = "/";
-    Local<Value> cwdValue = options->Get(NanNew("cwd"));
+    Local<Value> cwdValue = options->Get(Nan::New("cwd").ToLocalChecked());
 
     if (cwdValue->IsString()) {
         cwd = *String::Utf8Value(cwdValue);
@@ -210,14 +187,14 @@ NAN_METHOD(Attach) {
 
     // uid & gid
     int uid = -1;
-    Local<Value> uidValue = options->Get(NanNew("uid"));
+    Local<Value> uidValue = options->Get(Nan::New("uid").ToLocalChecked());
 
     if (uidValue->IsUint32()) {
         uid = uidValue->Uint32Value();
     }
 
     int gid = -1;
-    Local<Value> gidValue = options->Get(NanNew("gid"));
+    Local<Value> gidValue = options->Get(Nan::New("gid").ToLocalChecked());
 
     if (gidValue->IsUint32()) {
         gid = gidValue->Uint32Value();
@@ -225,7 +202,7 @@ NAN_METHOD(Attach) {
 
     // cgroup
     bool cgroup = true;
-    Local<Value> cgroupValue = options->Get(NanNew("cgroup"));
+    Local<Value> cgroupValue = options->Get(Nan::New("cgroup").ToLocalChecked());
 
     if (cgroupValue->IsBoolean()) {
         cgroup = cgroupValue->BooleanValue();
@@ -233,7 +210,7 @@ NAN_METHOD(Attach) {
 
     // namespaces
     int namespaces = -1;
-    Local<Value> nsValue = options->Get(NanNew("namespaces"));
+    Local<Value> nsValue = options->Get(Nan::New("namespaces").ToLocalChecked());
 
     if (nsValue->IsArray()) {
         Local<Array> nsArray = nsValue.As<Array>();
@@ -246,7 +223,7 @@ NAN_METHOD(Attach) {
             if (it != nsMap.end()) {
                 namespaces |= it->second;
             } else {
-                return NanThrowTypeError(("invalid namespace: " + ns).c_str());
+                return Nan::ThrowTypeError(("invalid namespace: " + ns).c_str());
             }
         }
     }
@@ -254,26 +231,26 @@ NAN_METHOD(Attach) {
     // stdio
     std::vector<int> childFds, parentFds;
 
-    Local<Value> streams = options->Get(NanNew("streams"));
-    Local<Value> term = options->Get(NanNew("term"));
+    Local<Value> streams = options->Get(Nan::New("streams").ToLocalChecked());
+    Local<Value> term = options->Get(Nan::New("term").ToLocalChecked());
 
     CreateFds(streams, term, childFds, parentFds);
 
-    Local<Array> fdArray = NanNew<Array>(parentFds.size());
+    Local<Array> fdArray = Nan::New<Array>(parentFds.size());
 
     for (unsigned int i = 0; i < parentFds.size(); i++) {
-        fdArray->Set(i, NanNew<Uint32>(parentFds[i]));
+        fdArray->Set(i, Nan::New<Uint32>(parentFds[i]));
     }
 
     // create AttachedProcess instance
-    Local<Function> AttachedProcess = args[0].As<Function>();
+    Local<Function> AttachedProcess = info[0].As<Function>();
 
     const int argc = 4;
     Local<Value> argv[argc] = {
-        args[1],
+        info[1],
         fdArray,
-        NanNew(term->BooleanValue()),
-        args.Holder()->Get(NanNew("owner"))
+        Nan::New(term->BooleanValue()),
+        info.Holder()->Get(Nan::New("owner").ToLocalChecked())
     };
 
     Local<Object> attachedProcess = AttachedProcess->NewInstance(argc, argv);
@@ -282,48 +259,46 @@ NAN_METHOD(Attach) {
     AttachWorker* attachWorker = new AttachWorker(container, attachedProcess,
             new ExecCommand(command, arguments), cwd, env, childFds, term->BooleanValue(),
             namespaces, cgroup, uid, gid);
-    NanAsyncQueueWorker(attachWorker);
+    Nan::AsyncQueueWorker(attachWorker);
 
-    NanReturnValue(attachedProcess);
+    info.GetReturnValue().Set(attachedProcess);
 }
 
 NAN_METHOD(OpenFile) {
-    NanScope();
-
-    if (!args[0]->IsFunction() || !args[1]->IsString() || !args[2]->IsUint32() ||
-            !args[3]->IsUint32() || !args[4]->IsUint32() || !args[5]->IsUint32()) {
-        return NanThrowTypeError("Invalid argument");
+    if (!info[0]->IsFunction() || !info[1]->IsString() || !info[2]->IsUint32() ||
+            !info[3]->IsUint32() || !info[4]->IsUint32() || !info[5]->IsUint32()) {
+        return Nan::ThrowTypeError("Invalid argument");
     }
 
-    lxc_container *container = Unwrap(args.Holder());
+    lxc_container *container = Unwrap(info.Holder());
 
-    std::string path = *String::Utf8Value(args[1]);
-    int flags = args[2]->Uint32Value();
-    int mode = args[3]->Uint32Value();
-    int uid = args[4]->Uint32Value();
-    int gid = args[5]->Uint32Value();
+    std::string path = *String::Utf8Value(info[1]);
+    int flags = info[2]->Uint32Value();
+    int mode = info[3]->Uint32Value();
+    int uid = info[4]->Uint32Value();
+    int gid = info[5]->Uint32Value();
 
     OpenCommand *openCommand = new OpenCommand(path, flags, mode);
 
     // stdio
     std::vector<int> childFds, parentFds;
-    CreateFds(NanNew(0), NanNew(false), childFds, parentFds);
+    CreateFds(Nan::New(0), Nan::New(false), childFds, parentFds);
 
-    Local<Array> fdArray = NanNew<Array>(parentFds.size());
+    Local<Array> fdArray = Nan::New<Array>(parentFds.size());
 
     for (unsigned int i = 0; i < parentFds.size(); i++) {
-        fdArray->Set(i, NanNew<Uint32>(parentFds[i]));
+        fdArray->Set(i, Nan::New<Uint32>(parentFds[i]));
     }
 
     // create AttachedProcess instance
-    Local<Function> AttachedProcess = args[0].As<Function>();
+    Local<Function> AttachedProcess = info[0].As<Function>();
 
     const int argc = 4;
     Local<Value> argv[argc] = {
-        NanNew("OpenCommand"),
+        Nan::New("OpenCommand").ToLocalChecked(),
         fdArray,
-        NanNew(false),
-        args.Holder()->Get(NanNew("owner"))
+        Nan::New(false),
+        info.Holder()->Get(Nan::New("owner").ToLocalChecked())
     };
 
     Local<Object> attachedProcess = AttachedProcess->NewInstance(argc, argv);
@@ -332,268 +307,244 @@ NAN_METHOD(OpenFile) {
     AttachWorker* attachWorker = new AttachWorker(container, attachedProcess,
             openCommand, "/", std::vector<std::string>(), childFds, false,
             CLONE_NEWNS | CLONE_NEWUSER, false, uid, gid);
-    NanAsyncQueueWorker(attachWorker);
+    Nan::AsyncQueueWorker(attachWorker);
 
-    NanReturnValue(attachedProcess);
+    info.GetReturnValue().Set(attachedProcess);
 }
 
 // this is just a test, should probably be asynchronous
 // TODO: test how much time this actually takes
 NAN_METHOD(State) {
-    NanScope();
+    lxc_container *container = Unwrap(info.Holder());
+    Local<String> state = Nan::New(container->state(container)).ToLocalChecked();
 
-    lxc_container *container = Unwrap(args.Holder());
-    Local<String> state = NanNew(container->state(container));
-
-    NanReturnValue(state);
+    info.GetReturnValue().Set(state);
 }
 
 NAN_METHOD(ConfigFile) {
-    NanScope();
-
-    if (!args[0]->IsString() || !args[1]->IsBoolean()
-            || !args[2]->IsFunction()) {
-        return NanThrowTypeError("Invalid argument");
+    if (!info[0]->IsString() || !info[1]->IsBoolean()
+            || !info[2]->IsFunction()) {
+        return Nan::ThrowTypeError("Invalid argument");
     }
 
-    lxc_container *container = Unwrap(args.Holder());
+    lxc_container *container = Unwrap(info.Holder());
 
-    NanCallback *callback = new NanCallback(args[2].As<Function>());
+    Nan::Callback *callback = new Nan::Callback(info[2].As<Function>());
 
-    String::Utf8Value file(args[0]);
-    bool save = args[1]->BooleanValue();
+    String::Utf8Value file(info[0]);
+    bool save = info[1]->BooleanValue();
 
-    NanAsyncQueueWorker(new ConfigWorker(container, callback, *file, save));
-
-    NanReturnUndefined();
+    Nan::AsyncQueueWorker(new ConfigWorker(container, callback, *file, save));
 }
 
 NAN_METHOD(GetKeys) {
-    NanScope();
-
-    lxc_container *container = Unwrap(args.Holder());
+    lxc_container *container = Unwrap(info.Holder());
 
     int len = container->get_keys(container, nullptr, nullptr, 0);
 
     if (len < 0) {
-        return NanThrowError("Unable to read configuration keys");
+        return Nan::ThrowError("Unable to read configuration keys");
     }
 
     char *buffer = new char[len + 1];
 
     if (container->get_keys(container, nullptr, buffer, len + 1) != len) {
         delete[] buffer;
-        return NanThrowError("Unable to read configuration keys");
+        return Nan::ThrowError("Unable to read configuration keys");
     }
 
-    Local<String> keys = NanNew(buffer);
-    delete[] buffer;
+    Local<String> keys = Nan::New(buffer).ToLocalChecked();
+    info.GetReturnValue().Set(keys);
 
-    NanReturnValue(keys);
+    delete[] buffer;
 }
 
 NAN_METHOD(GetConfigItem) {
-    NanScope();
-
-    if (!args[0]->IsString()) {
-        return NanThrowTypeError("Invalid argument");
+    if (!info[0]->IsString()) {
+        return Nan::ThrowTypeError("Invalid argument");
     }
 
-    lxc_container *container = Unwrap(args.Holder());
+    lxc_container *container = Unwrap(info.Holder());
 
-    String::Utf8Value key(args[0]);
-
+    String::Utf8Value key(info[0]);
     int len = container->get_config_item(container, *key, nullptr, 0);
 
     if (len < 0) {
-        return NanThrowError("Invalid configuration key");
+        return Nan::ThrowError("Invalid configuration key");
     }
 
     if (len == 0) {
-        NanReturnValue("");
+        return info.GetReturnValue().SetEmptyString();
     }
 
     char *buffer = new char[len + 1];
 
     if (container->get_config_item(container, *key, buffer, len + 1) != len) {
         delete[] buffer;
-        return NanThrowError("Unable to read configuration value");
+        return Nan::ThrowError("Unable to read configuration value");
     }
 
-    Local<String> value = NanNew<String>(buffer);
-    delete[] buffer;
+    Local<String> value = Nan::New<String>(buffer).ToLocalChecked();
+    info.GetReturnValue().Set(value);
 
-    NanReturnValue(value);
+    delete[] buffer;
 }
 
 NAN_METHOD(SetConfigItem) {
-    NanScope();
-
-    if (!args[0]->IsString() || !(args[1]->IsString() || args[1]->IsNumber())) {
-        return NanThrowTypeError("Invalid argument");
+    if (!info[0]->IsString() || !(info[1]->IsString() || info[1]->IsNumber())) {
+        return Nan::ThrowTypeError("Invalid argument");
     }
 
-    lxc_container *container = Unwrap(args.Holder());
+    lxc_container *container = Unwrap(info.Holder());
 
-    String::Utf8Value key(args[0]);
-    String::Utf8Value value(args[1]);
+    String::Utf8Value key(info[0]);
+    String::Utf8Value value(info[1]);
 
     bool ret = container->set_config_item(container, *key, *value);
 
-    NanReturnValue(ret);
+    info.GetReturnValue().Set(ret);
 }
 
 NAN_METHOD(ClearConfigItem) {
-    NanScope();
-
-    if (!args[0]->IsString()) {
-        return NanThrowTypeError("Invalid argument");
+    if (!info[0]->IsString()) {
+        return Nan::ThrowTypeError("Invalid argument");
     }
 
-    lxc_container *container = Unwrap(args.Holder());
+    lxc_container *container = Unwrap(info.Holder());
 
-    String::Utf8Value key(args[0]);
+    String::Utf8Value key(info[0]);
 
     bool ret = container->clear_config_item(container, *key);
 
-    NanReturnValue(ret);
+    info.GetReturnValue().Set(ret);
 }
 
 NAN_METHOD(GetRunningConfigItem) {
-    NanScope();
-
-    if (!args[0]->IsString()) {
-        return NanThrowTypeError("Invalid argument");
+    if (!info[0]->IsString()) {
+        return Nan::ThrowTypeError("Invalid argument");
     }
 
-    lxc_container *container = Unwrap(args.Holder());
+    lxc_container *container = Unwrap(info.Holder());
 
-    String::Utf8Value key(args[0]);
+    String::Utf8Value key(info[0]);
 
     char *ret = container->get_running_config_item(container, *key);
 
     if (!ret) {
-        return NanThrowError("Unable to read configuration value");
+        return Nan::ThrowError("Unable to read configuration value");
     }
 
-    Local<String> value = NanNew<String>(ret);
+    Local<String> value = Nan::New(ret).ToLocalChecked();
     free(ret);
 
-    NanReturnValue(value);
+    info.GetReturnValue().Set(value);
 }
 
 NAN_METHOD(GetCgroupItem) {
-    NanScope();
-
-    if (!args[0]->IsString()) {
-        return NanThrowTypeError("Invalid argument");
+    if (!info[0]->IsString()) {
+        return Nan::ThrowTypeError("Invalid argument");
     }
 
-    lxc_container *container = Unwrap(args.Holder());
+    lxc_container *container = Unwrap(info.Holder());
 
-    String::Utf8Value key(args[0]);
+    String::Utf8Value key(info[0]);
 
     int len = container->get_cgroup_item(container, *key, nullptr, 0);
 
     if (len < 0) {
-        return NanThrowError("Invalid cgroup key or container not running");
+        return Nan::ThrowError("Invalid cgroup key or container not running");
     }
 
     char *buffer = new char[len + 1];
 
     if (container->get_cgroup_item(container, *key, buffer, len + 1) != len) {
         delete[] buffer;
-        return NanThrowError("Unable to read cgroup value");
+        return Nan::ThrowError("Unable to read cgroup value");
     }
 
-    Local<String> value = NanNew(buffer);
-    delete[] buffer;
+    Local<String> value = Nan::New(buffer).ToLocalChecked();
+    info.GetReturnValue().Set(value);
 
-    NanReturnValue(value);
+    delete[] buffer;
 }
 
 NAN_METHOD(SetCgroupItem) {
-    NanScope();
-
-    if (!args[0]->IsString() || !(args[1]->IsString() || args[1]->IsNumber())) {
-        return NanThrowTypeError("Invalid argument");
+    if (!info[0]->IsString() || !(info[1]->IsString() || info[1]->IsNumber())) {
+        return Nan::ThrowTypeError("Invalid argument");
     }
 
-    lxc_container *container = Unwrap(args.Holder());
+    lxc_container *container = Unwrap(info.Holder());
 
-    String::Utf8Value key(args[0]);
-    String::Utf8Value value(args[1]);
+    String::Utf8Value key(info[0]);
+    String::Utf8Value value(info[1]);
 
     bool ret = container->set_cgroup_item(container, *key, *value);
 
-    NanReturnValue(ret);
+    info.GetReturnValue().Set(ret);
 }
 
 // Get container
 
 NAN_METHOD(GetContainer) {
-    NanScope();
-
-    if (!args[0]->IsString() && !args[1]->IsString() && !args[2]->IsBoolean()
-            && !args[3]->IsFunction()) {
-        return NanThrowTypeError("Invalid argument");
+    if (!info[0]->IsString() && !info[1]->IsString() && !info[2]->IsBoolean()
+            && !info[3]->IsFunction()) {
+        return Nan::ThrowTypeError("Invalid argument");
     }
 
-    String::Utf8Value name(args[0]);
-    String::Utf8Value path(args[1]);
-    bool defined = args[2]->BooleanValue();
+    String::Utf8Value name(info[0]);
+    String::Utf8Value path(info[1]);
+    bool defined = info[2]->BooleanValue();
 
-    NanCallback *callback = new NanCallback(args[3].As<Function>());
+    Nan::Callback *callback = new Nan::Callback(info[3].As<Function>());
 
-    NanAsyncQueueWorker(new GetWorker(callback, *name, *path, defined));
-
-    NanReturnUndefined();
+    Nan::AsyncQueueWorker(new GetWorker(callback, *name, *path, defined));
 }
 
 // Initialization
 
 void Init(Handle<Object> exports) {
-    NanScope();
+    Nan::HandleScope scope;
 
     on_exit(ExitHandler, nullptr);
 
     AttachInit(exports);
 
-    Local<FunctionTemplate>constructorTemplate = NanNew<FunctionTemplate>(LXCContainer);
+    Local<FunctionTemplate>constructorTemplate = Nan::New<FunctionTemplate>(LXCContainer);
 
-    constructorTemplate->SetClassName(NanNew("LXCContainer"));
+    constructorTemplate->SetClassName(Nan::New("LXCContainer").ToLocalChecked());
     constructorTemplate->InstanceTemplate()->SetInternalFieldCount(1);
 
     // Methods
-    NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "create", Create);
-    NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "destroy", Destroy);
-    NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "clone", Clone);
+    Nan::SetPrototypeMethod(constructorTemplate, "create", Create);
+    Nan::SetPrototypeMethod(constructorTemplate, "destroy", Destroy);
+    Nan::SetPrototypeMethod(constructorTemplate, "clone", Clone);
 
-    NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "start", Start);
-    NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "stop", Stop);
+    Nan::SetPrototypeMethod(constructorTemplate, "start", Start);
+    Nan::SetPrototypeMethod(constructorTemplate, "stop", Stop);
 
-    NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "state", State);
-    NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "attach", Attach);
+    Nan::SetPrototypeMethod(constructorTemplate, "state", State);
+    Nan::SetPrototypeMethod(constructorTemplate, "attach", Attach);
 
-    NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "configFile", ConfigFile);
-    NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "getKeys", GetKeys);
-    NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "getConfigItem", GetConfigItem);
-    NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "setConfigItem", SetConfigItem);
-    NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "clearConfigItem", ClearConfigItem);
-    NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "getRunningConfigItem", GetRunningConfigItem);
+    Nan::SetPrototypeMethod(constructorTemplate, "configFile", ConfigFile);
+    Nan::SetPrototypeMethod(constructorTemplate, "getKeys", GetKeys);
+    Nan::SetPrototypeMethod(constructorTemplate, "getConfigItem", GetConfigItem);
+    Nan::SetPrototypeMethod(constructorTemplate, "setConfigItem", SetConfigItem);
+    Nan::SetPrototypeMethod(constructorTemplate, "clearConfigItem", ClearConfigItem);
+    Nan::SetPrototypeMethod(constructorTemplate, "getRunningConfigItem", GetRunningConfigItem);
 
-    NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "getCgroupItem", GetCgroupItem);
-    NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "setCgroupItem", SetCgroupItem);
+    Nan::SetPrototypeMethod(constructorTemplate, "getCgroupItem", GetCgroupItem);
+    Nan::SetPrototypeMethod(constructorTemplate, "setCgroupItem", SetCgroupItem);
 
-    NODE_SET_PROTOTYPE_METHOD(constructorTemplate, "openFile", OpenFile);
+    Nan::SetPrototypeMethod(constructorTemplate, "openFile", OpenFile);
 
-    NanAssignPersistent(containerConstructor, constructorTemplate->GetFunction());
+    containerConstructor.Reset(constructorTemplate->GetFunction());
+    //Nan::AssignPersistent(containerConstructor, constructorTemplate->GetFunction());
 
     // Exports
-    exports->Set(NanNew("getContainer"),
-            NanNew<FunctionTemplate>(GetContainer)->GetFunction());
-    exports->Set(NanNew("version"), NanNew(lxc_get_version()));
-
+    exports->Set(Nan::New("getContainer").ToLocalChecked(),
+            Nan::New<FunctionTemplate>(GetContainer)->GetFunction());
+    exports->Set(Nan::New("version").ToLocalChecked(),
+            Nan::New(lxc_get_version()).ToLocalChecked());
 }
 
 NODE_MODULE(lxc, Init)

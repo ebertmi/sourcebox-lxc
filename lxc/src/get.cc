@@ -4,7 +4,7 @@
 
 using namespace v8;
 
-GetWorker::GetWorker(NanCallback *callback, const std::string& name,
+GetWorker::GetWorker(Nan::Callback *callback, const std::string& name,
         const std::string& path, bool requireDefined)
         : AsyncWorker(nullptr, callback), name_(name), path_(path) {
     requireDefined_ = requireDefined;
@@ -23,13 +23,13 @@ void GetWorker::Execute() {
 }
 
 void GetWorker::HandleOKCallback() {
-    NanScope();
+    Nan::HandleScope scope;
 
     Local<Object> wrap = Wrap(container_);
 
     const int argc = 2;
     Local<Value> argv[argc] = {
-        NanNull(),
+        Nan::Null(),
         wrap
     };
 
