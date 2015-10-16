@@ -73,10 +73,13 @@ static void ReapChildren(uv_signal_t* handle, int signal) {
         }
 
         if (ret == -1) {
-            if (errno != ECHILD) {
-                abort();
+            if (errno == ECHILD) {
+                // child already was reaped, this happens on old node versions
+                reaped.push_back(std::make_pair(-pid, 0));
+                continue;
             }
-            continue;
+
+            abort();
         }
 
         reaped.push_back(std::make_pair(pid, status));
@@ -89,15 +92,22 @@ static void ReapChildren(uv_signal_t* handle, int signal) {
         Local<Value> exitCode;
         Local<Value> signalCode;
 
-        if (WIFEXITED(status)) {
-            exitCode = Nan::New<Uint32>(WEXITSTATUS(status));
-            signalCode = Nan::Null();
-        } else if (WIFSIGNALED(status)) {
-            signalCode = Nan::New(node::signo_string(WTERMSIG(status))).ToLocalChecked();
+        if (pid < 0) {
+            // old node version, we don't know the exit code :C
+            pid = -pid;
             exitCode = Nan::Null();
+            signalCode = Nan::New("ECHILD").ToLocalChecked();;
         } else {
-            // child process got stopped or continued
-            continue;
+            if (WIFEXITED(status)) {
+                exitCode = Nan::New<Uint32>(WEXITSTATUS(status));
+                signalCode = Nan::Null();
+            } else if (WIFSIGNALED(status)) {
+                signalCode = Nan::New(node::signo_string(WTERMSIG(status))).ToLocalChecked();
+                exitCode = Nan::Null();
+            } else {
+                // child process got stopped or continued
+                continue;
+            }
         }
 
         const int argc = 3;
