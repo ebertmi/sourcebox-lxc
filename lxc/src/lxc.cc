@@ -400,9 +400,9 @@ NAN_METHOD(SetConfigItem) {
     String::Utf8Value key(info[0]);
     String::Utf8Value value(info[1]);
 
-    bool ret = container->set_config_item(container, *key, *value);
-
-    info.GetReturnValue().Set(ret);
+    if (!container->set_config_item(container, *key, *value)) {
+        Nan::ThrowError("Unable to set configuration value");
+    }
 }
 
 NAN_METHOD(ClearConfigItem) {
@@ -414,9 +414,9 @@ NAN_METHOD(ClearConfigItem) {
 
     String::Utf8Value key(info[0]);
 
-    bool ret = container->clear_config_item(container, *key);
-
-    info.GetReturnValue().Set(ret);
+    if (!container->clear_config_item(container, *key)) {
+        Nan::ThrowError("Unable to clear configuration value");
+    }
 }
 
 NAN_METHOD(GetRunningConfigItem) {
@@ -538,7 +538,6 @@ void Init(Handle<Object> exports) {
     Nan::SetPrototypeMethod(constructorTemplate, "openFile", OpenFile);
 
     containerConstructor.Reset(constructorTemplate->GetFunction());
-    //Nan::AssignPersistent(containerConstructor, constructorTemplate->GetFunction());
 
     // Exports
     exports->Set(Nan::New("getContainer").ToLocalChecked(),

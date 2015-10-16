@@ -193,24 +193,26 @@ Container.prototype.setConfigItem = function (key, value) {
   key = normalizeConfigKey(key);
   var oldValue = this.getConfigItem(key);
 
-  var setKey = (function (value) {
-    this.clearConfigItem(key);
+  var setKey = function (value) {
+    try {
+      this.clearConfigItem(key);
+    } catch (e) {}
 
     if (_.isArray(value)) {
-      return value.every(function (value) {
-        return this._container.setConfigItem(key, value);
+      value.forEach(function (value) {
+        this._container.setConfigItem(key, value);
       }, this);
     } else {
-      return this._container.setConfigItem(key, value);
+      this._container.setConfigItem(key, value);
     }
-  }).bind(this);
+  }.bind(this);
 
-  if (!setKey(value)) {
+  try {
+    setKey(value);
+  } catch (err) {
     setKey(oldValue);
-    return false;
+    throw err;
   }
-
-  return true;
 };
 
 /**
@@ -219,12 +221,12 @@ Container.prototype.setConfigItem = function (key, value) {
  */
 Container.prototype.appendConfigItem = function (key, value) {
   key = normalizeConfigKey(key);
-  return this._container.setConfigItem(key, value);
+  this._container.setConfigItem(key, value);
 };
 
 Container.prototype.clearConfigItem = function (key) {
   key = normalizeConfigKey(key);
-  return this._container.clearConfigItem(key);
+  this._container.clearConfigItem(key);
 };
 
 Container.prototype.getRunningConfigItem = function (key) {
