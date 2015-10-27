@@ -250,7 +250,7 @@ Container.prototype.getCgroupItem = function (key) {
  * @param {String|Number} value Value to set
  */
 Container.prototype.setCgroupItem = function (key, value) {
-  return this._container.setCgroupItem(key, value);
+  this._container.setCgroupItem(key, value);
 };
 
 /**

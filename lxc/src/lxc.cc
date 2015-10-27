@@ -348,14 +348,14 @@ NAN_METHOD(GetKeys) {
 
     char *buffer = new char[len + 1];
 
-    if (container->get_keys(container, nullptr, buffer, len + 1) != len) {
-        delete[] buffer;
-        return Nan::ThrowError("Unable to read configuration keys");
+    if (container->get_keys(container, nullptr, buffer, len + 1) == len) {
+        Local<String> keys = Nan::New(buffer).ToLocalChecked();
+        info.GetReturnValue().Set(keys);
+    } else {
+        Nan::ThrowError("Unable to read configuration keys");
     }
 
-    Local<String> keys = Nan::New(buffer).ToLocalChecked();
-    info.GetReturnValue().Set(keys);
-
+    // always free buffer (no return in front of throw)
     delete[] buffer;
 }
 
@@ -379,14 +379,14 @@ NAN_METHOD(GetConfigItem) {
 
     char *buffer = new char[len + 1];
 
-    if (container->get_config_item(container, *key, buffer, len + 1) != len) {
-        delete[] buffer;
-        return Nan::ThrowError("Unable to read configuration value");
+    if (container->get_config_item(container, *key, buffer, len + 1) == len) {
+        Local<String> value = Nan::New<String>(buffer).ToLocalChecked();
+        info.GetReturnValue().Set(value);
+    } else {
+        Nan::ThrowError("Unable to read configuration value");
     }
 
-    Local<String> value = Nan::New<String>(buffer).ToLocalChecked();
-    info.GetReturnValue().Set(value);
-
+    // always free buffer (no return in front of throw)
     delete[] buffer;
 }
 
@@ -435,9 +435,9 @@ NAN_METHOD(GetRunningConfigItem) {
     }
 
     Local<String> value = Nan::New(ret).ToLocalChecked();
-    free(ret);
-
     info.GetReturnValue().Set(value);
+
+    free(ret);
 }
 
 NAN_METHOD(GetCgroupItem) {
@@ -457,14 +457,14 @@ NAN_METHOD(GetCgroupItem) {
 
     char *buffer = new char[len + 1];
 
-    if (container->get_cgroup_item(container, *key, buffer, len + 1) != len) {
-        delete[] buffer;
-        return Nan::ThrowError("Unable to read cgroup value");
+    if (container->get_cgroup_item(container, *key, buffer, len + 1) == len) {
+        Local<String> value = Nan::New(buffer).ToLocalChecked();
+        info.GetReturnValue().Set(value);
+    } else {
+        Nan::ThrowError("Unable to read cgroup value");
     }
 
-    Local<String> value = Nan::New(buffer).ToLocalChecked();
-    info.GetReturnValue().Set(value);
-
+    // always free buffer (no return in front of throw)
     delete[] buffer;
 }
 
@@ -478,9 +478,9 @@ NAN_METHOD(SetCgroupItem) {
     String::Utf8Value key(info[0]);
     String::Utf8Value value(info[1]);
 
-    bool ret = container->set_cgroup_item(container, *key, *value);
-
-    info.GetReturnValue().Set(ret);
+    if (!container->set_cgroup_item(container, *key, *value)) {
+        Nan::ThrowError("Unable to set cgroup value");
+    }
 }
 
 // Get container
