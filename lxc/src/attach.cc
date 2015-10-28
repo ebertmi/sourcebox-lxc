@@ -284,6 +284,8 @@ int AttachWorker::AttachFunction(void *payload) {
 
     if (worker->term_) {
         login_tty(0);
+    } else {
+        setsid();
     }
 
     for (unsigned int i = 3; i < fds.size(); i++) {
