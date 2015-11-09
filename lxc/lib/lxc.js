@@ -287,6 +287,11 @@ Container.prototype.openFile = function (path, flags, options, callback) {
                                         options.mode, options.uid, options.gid);
 
   helper.on('error', callback);
+  helper.on('exit', function (code, signal) {
+    if (signal) {
+      callback(new Error('FDHelper was killed: ' + signal));
+    }
+  });
 
   helper.stdout.pipe(concat(function (stdout) {
     var fdNumber = parseInt(stdout);
