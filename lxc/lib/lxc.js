@@ -2,6 +2,7 @@
 
 var fs = require('fs');
 var constants = process.binding('constants');
+var pathModule = require('path');
 
 var _ = require('lodash');
 var concat = require('concat-stream');
@@ -60,10 +61,6 @@ Container.prototype.stop = function (callback) {
 
 Container.prototype.destroy = function (callback) {
   this._container.destroy(callback);
-};
-
-Container.prototype.state = function () {
-  return this._container.state();
 };
 
 Container.prototype.clone = function (name, options, callback) {
@@ -300,7 +297,7 @@ Container.prototype.openFile = function (path, flags, options, callback) {
       return;
     }
 
-    var procPath = '/proc/' + helper.pid + '/fd/' + fdNumber;
+    var procPath = pathModule.join('/proc', helper.pid, 'fd', fdNumber);
 
     fs.open(procPath, flags & ~constants.O_EXCL, function (err, fd) {
       helper.stdin.end();

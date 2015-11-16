@@ -96,7 +96,7 @@ static void ReapChildren(uv_signal_t* handle, int signal) {
             // old node version, we don't know the exit code :C
             pid = -pid;
             exitCode = Nan::Null();
-            signalCode = Nan::New("ECHILD").ToLocalChecked();;
+            signalCode = Nan::New("ECHILD").ToLocalChecked();
         } else {
             if (WIFEXITED(status)) {
                 exitCode = Nan::New<Uint32>(WEXITSTATUS(status));

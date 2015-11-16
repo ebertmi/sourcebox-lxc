@@ -312,15 +312,6 @@ NAN_METHOD(OpenFile) {
     info.GetReturnValue().Set(attachedProcess);
 }
 
-// this is just a test, should probably be asynchronous
-// TODO: test how much time this actually takes
-NAN_METHOD(State) {
-    lxc_container *container = Unwrap(info.Holder());
-    Local<String> state = Nan::New(container->state(container)).ToLocalChecked();
-
-    info.GetReturnValue().Set(state);
-}
-
 NAN_METHOD(ConfigFile) {
     if (!info[0]->IsString() || !info[1]->IsBoolean()
             || !info[2]->IsFunction()) {
@@ -522,7 +513,6 @@ void Init(Handle<Object> exports) {
     Nan::SetPrototypeMethod(constructorTemplate, "start", Start);
     Nan::SetPrototypeMethod(constructorTemplate, "stop", Stop);
 
-    Nan::SetPrototypeMethod(constructorTemplate, "state", State);
     Nan::SetPrototypeMethod(constructorTemplate, "attach", Attach);
 
     Nan::SetPrototypeMethod(constructorTemplate, "configFile", ConfigFile);
