@@ -43,4 +43,4 @@ You have been warned.
 
 ### libcap-dev
 
-POSIX capabilities.
+Library for setting POSIX capabilities.
