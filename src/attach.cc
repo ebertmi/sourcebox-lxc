@@ -248,6 +248,7 @@ void AttachWorker::HandleOKCallback() {
 
         Local<Function> emit = attachedProcess->Get(Nan::New("emit").ToLocalChecked()).As<Function>();
         Nan::MakeCallback(attachedProcess, emit, argc, argv);
+        ReapChildren(nullptr, 0);
     } else {
         // Attaching was successful but exec failed
 
