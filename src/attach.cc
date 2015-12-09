@@ -1,9 +1,11 @@
 #include "attach.h"
 
-#include <sys/wait.h>
-#include <sys/capability.h>
-#include <unistd.h>
+#include <dirent.h>
 #include <pty.h>
+#include <sys/capability.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
 #include <utmp.h>
 
 #if NAUV_UVVERSION >= 0x000b14
