@@ -308,7 +308,7 @@ int AttachCommand::Attach(int errorFd) {
 }
 
 int AttachCommand::Attach() {
-    return 0;
+    return EXIT_SUCCESS;
 }
 
 ExecCommand::ExecCommand(const std::string& command,
@@ -356,7 +356,8 @@ int OpenCommand::Attach() {
         fprintf(stderr, "%d", errno);
         fflush(stderr);
         fclose(stderr);
-        return 1;
+
+        return EXIT_FAILURE;
     }
 
     printf("%d", fd);
@@ -366,7 +367,7 @@ int OpenCommand::Attach() {
     // Wait until node has read the FD and signaled this by closing stdin.
     while (getchar() != EOF);
 
-    return 0;
+    return EXIT_SUCCESS;
 }
 
 void OpenCommand::InitialCleanup() {
