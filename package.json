@@ -5,6 +5,13 @@
   "author": "Johannes Henninger <johannes@henninger.io>",
   "license": "GPL-3.0+",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jhenninger/sourcebox-lxc.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jhenninger/sourcebox-lxc/issues"
+  },
   "os": [
     "linux"
   ],
