@@ -1,7 +1,7 @@
 {
   "name": "@sourcebox/lxc",
   "description": "LXC bindings",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "author": "Johannes Henninger <johannes@henninger.io>",
   "license": "GPL-3.0+",
   "private": true,
@@ -21,8 +21,8 @@
   },
   "dependencies": {
     "bindings": "^1.2.1",
-    "concat-stream": "^1.5.2",
-    "lodash": "^4.16.6",
-    "nan": "^2.4.0"
+    "concat-stream": "^1.6.0",
+    "lodash": "^4.17.4",
+    "nan": "^2.5.1"
   }
 }
