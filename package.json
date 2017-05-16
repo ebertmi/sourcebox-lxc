@@ -1,8 +1,12 @@
 {
   "name": "@sourcebox/lxc",
   "description": "LXC bindings",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "author": "Johannes Henninger <johannes@henninger.io>",
+  "contributers": [{
+    "name": "Michael Ebert",
+    "email": "michael.ebert@gmail.com"
+  }],
   "license": "GPL-3.0+",
   "private": true,
   "repository": {
@@ -23,6 +27,6 @@
     "bindings": "^1.2.1",
     "concat-stream": "^1.6.0",
     "lodash": "^4.17.4",
-    "nan": "^2.5.1"
+    "nan": "^2.6.2"
   }
 }
