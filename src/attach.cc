@@ -250,6 +250,14 @@ void AttachWorker::HandleOKCallback() {
 
         Local<Function> emit = attachedProcess->Get(Nan::New("emit").ToLocalChecked()).As<Function>();
         Nan::MakeCallback(attachedProcess, emit, argc, argv);
+        // ToDo: replace with 
+        /*
+            Nan::AsyncResource* async_resource;
+            async_resource = new Nan::AsyncResource("sourcebox-lxc:HandleOKCallback");
+            async_resource.runInAsyncScope(attachedProcess, emit, argc, argv);
+            delete async_resource;
+
+        */
         ReapChildren(nullptr, 0);
     } else {
         // Attaching was successful but exec failed

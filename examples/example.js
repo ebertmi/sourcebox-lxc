@@ -4,7 +4,7 @@ var lxc = require('..');
 
 // get a container 
 lxc('source.box', {
-  path: '/home/jo/sb',
+  path: '/home/trycoding/sb',
   defined: true // require container to exist
 }, function (err, container) {
   if (err) {
